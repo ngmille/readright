@@ -3,6 +3,15 @@ A flutter mobile app that helps children practice reading words aloud, receive p
 
 **##Milestone 0**
 
+lib/
+├── main.dart
+├── screens/
+├── widgets/
+├── models/
+├── services/
+├── data/
+└── assets/
+
 ## Navigation
 - Screen first displays login bars
 - Separate route for login

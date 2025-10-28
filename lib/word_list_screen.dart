@@ -5,8 +5,23 @@ class WordListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Word List Screen (Coming soon)', style: TextStyle(fontSize: 24)),
+    final wordLists = ['Dolch List', 'Phonics List', 'Minimal Pairs'];
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: wordLists.length,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            title: Text(wordLists[index]),
+            trailing: const Icon(Icons.arrow_forward),
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('${wordLists[index]} tapped!')),
+            ),
+          ),
+        );
+      },
     );
   }
 }
