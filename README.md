@@ -1,16 +1,18 @@
-# readright
+### readright
+A flutter mobile app that helps children practice reading words aloud, receive pronunciation feedback and track progress over time. The app serves for both the students (practice and feedback) and Teachers (assign, review, and analyze progress). 
 
-A new Flutter project.
+**##Milestone 0**
 
-## Getting Started
+## Navigation
+- Screen first displays login bars
+- Separate route for login
 
-This project is a starting point for a Flutter application.
+## Screens Implemented
+1. Login Screen
+2. Teacher Dashboard Screen
+3. Student Dashboard Screen
+4. Word List Screen
+5. Practice Screen
+6. Feedback Screen
+7. Progress Screen
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
