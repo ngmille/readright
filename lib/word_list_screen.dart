@@ -6,7 +6,7 @@ class WordListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text('Login Screen (Coming soon)', style: TextStyle(fontSize: 24)),
+      child: Text('Word List Screen (Coming soon)', style: TextStyle(fontSize: 24)),
     );
   }
 }
