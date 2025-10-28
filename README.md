@@ -1,7 +1,14 @@
 ### readright
 A flutter mobile app that helps children practice reading words aloud, receive pronunciation feedback and track progress over time. The app serves for both the students (practice and feedback) and Teachers (assign, review, and analyze progress). 
 
-**##Milestone 0**
+**## Milestone 0**
+
+**## Milestone 1**
+* Differentiate between students and teachers
+* Use seed word list to create sample sentences
+* Define the provider structure
+* Basic progress screen
+* Implement basic record functionality
 
 lib/
 ├── main.dart
