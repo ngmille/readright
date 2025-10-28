@@ -25,7 +25,7 @@ class ReadRightApp extends StatelessWidget {
         '/practice': (_) => const PracticeScreen(),
         '/feedback': (_) => const FeedbackScreen(),
         '/progress': (_) => const ProgressScreen(),
-        '/teacher_dashboard': (_) => const TeacherDashboard(),
+        '/teacher_dashboard': (_) => const TeacherDashboardScreen(),
       },
     );
   }
@@ -45,7 +45,7 @@ class _AppNavigatorState extends State<AppNavigator> {
     PracticeScreen(),
     FeedbackScreen(),
     ProgressScreen(),
-    TeacherDashboard(),
+    TeacherDashboardScreen(),
   ];
 
   @override
