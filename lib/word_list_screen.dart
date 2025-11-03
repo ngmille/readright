@@ -24,8 +24,7 @@ class _WordListScreenState extends State<WordListScreen> {
       backgroundColor: const Color.fromARGB(255, 174, 98, 186),
       appBar: AppBar(
         title: const Text('Word Lists'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
       ),
       body: FutureBuilder<List<WordList>>(
         future: _wordListsFuture,
