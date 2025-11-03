@@ -4,7 +4,7 @@ import 'word_list_screen.dart';
 import 'practice_screen.dart';
 import 'feedback_screen.dart';
 import 'progress_screen.dart';
-import 'teacherDashboard_screen.dart';
+import 'teacher_dashboard_screen.dart';
 
 void main() {
   runApp(const ReadRightApp());
