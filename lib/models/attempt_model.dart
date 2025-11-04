@@ -4,6 +4,10 @@ class Attempt {
   final int score;
   final String feedback;
   final DateTime createdAt;
+  final String? transcript;
+  final double? accuracy;
+  final Duration? duration;
+  final String? audioPath;
 
   const Attempt({
     required this.id,
@@ -11,5 +15,9 @@ class Attempt {
     required this.score,
     required this.feedback,
     required this.createdAt,
+    this.transcript,
+    this.accuracy,
+    this.duration,
+    this.audioPath,
   });
 }

@@ -47,5 +47,7 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ReadRight needs microphone access to record pronunciation.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ReadRight uses speech recognition to check how words are pronounced.</string>
 </dict>
 </plist>

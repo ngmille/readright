@@ -47,13 +47,22 @@ class WordList {
 
     final String category = row[0].toString().toLowerCase().trim().replaceAll(' ', '_');
     final String word = row[1].toString().trim();
-    final String sentence = row[2].toString().trim();
+    final String sentenceCell = row[2].toString().trim();
+    final sentences = sentenceCell
+        .split(RegExp(r'[|;]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    if (sentences.isEmpty) {
+      sentences.add('Practice reading "$word".');
+    }
 
     categoryMap.putIfAbsent(category, () => []).add(
       WordItem(
         text: word,
-        pattern: '', // No pattern in CSV
-        sampleSentences: [sentence], // Single sentence
+        pattern: '',
+        sampleSentences: sentences,
       ),
     );
   }
