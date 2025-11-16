@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:readright/services/pronunciation_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -55,6 +55,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   double _lastAccuracy = 0;
   bool? _lastWasCorrect;
   String? _feedbackMessage;
+  String? _phonemeFeedback;
   String? _errorMessage;
 
   @override
@@ -227,6 +228,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
       _lastAccuracy = 0;
       _lastWasCorrect = null;
       _feedbackMessage = null;
+      _phonemeFeedback = null;
       _errorMessage = null;
     });
 
@@ -317,43 +319,42 @@ class _PracticeScreenState extends State<PracticeScreen> {
   }
 
   Future<void> _processTranscript(String transcript) async {
-    if (_isProcessing || _currentQueue.isEmpty) {
-      return;
-    }
+  if (_isProcessing || _currentQueue.isEmpty) return;
 
-    _processedCurrentAttempt = true;
-    _countdownTimer?.cancel();
+  _processedCurrentAttempt = true;
+  _countdownTimer?.cancel();
+  final attemptController = context.read<AttemptController>();
+  if (_speech.isListening) {
+    try {
+      await _speech.stop();
+    } catch (_) {} // ignore
+  }
 
-    final attemptController = context.read<AttemptController>();
+  final word = _currentQueue[_currentWordIndex];
+  final normalizedTranscript = transcript.trim().toLowerCase();
+  final duration = _listeningStartedAt != null ? DateTime.now().difference(_listeningStartedAt!) : null;
 
-    if (_speech.isListening) {
-      try {
-        await _speech.stop();
-      } catch (_) {
-        // Ignore stop errors; we only need to ensure the session ends.
-      }
-    }
+  try {
+    final assessor = AssessorFactory.create();
+    final result = await assessor.assess(
+      referenceText: word.text,
+      transcript: transcript, // pass actual STT transcript
+      locale: 'en-US',
+    );
 
-    final word = _currentQueue[_currentWordIndex];
-    final normalizedTarget = word.text.trim().toLowerCase();
-    final normalizedTranscript = transcript.trim().toLowerCase();
-    final duration = _listeningStartedAt != null ? DateTime.now().difference(_listeningStartedAt!) : null;
-
-    double accuracy = 0;
-    if (normalizedTranscript.isNotEmpty) {
-      accuracy = _calculateSimilarity(normalizedTarget, normalizedTranscript);
-    }
-    final score = (accuracy * 100).clamp(0, 100).round();
-    final isCorrect = accuracy >= _masteryThreshold;
-    final feedback = _feedbackForScore(score, normalizedTranscript.isEmpty);
+    final accuracy = result.accuracy ?? 0.0;
+    final score = result.score;
+    final isCorrect = accuracy >= _masteryThreshold; // Uses result.accuracy
+    final feedback = result.feedback;
 
     setState(() {
       _isListening = false;
       _isProcessing = true;
-      _lastTranscript = transcript.trim();
+      _lastTranscript = result.transcript;
       _lastAccuracy = accuracy;
       _lastWasCorrect = isCorrect;
       _feedbackMessage = feedback;
+      _phonemeFeedback = result.phonemeFeedback;
     });
 
     await attemptController.addAttempt(
@@ -363,22 +364,41 @@ class _PracticeScreenState extends State<PracticeScreen> {
       transcript: normalizedTranscript,
       accuracy: accuracy,
       duration: duration,
-    );
+    ); // extend addAttempt for phonemeFeedback if the model is later updated
 
     if (isCorrect) {
       await _markWordMastered(word);
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await Future.delayed(const Duration(milliseconds: 600));
       _advanceToNextWord(removeCurrent: true);
     } else {
       _advanceToNextWord(removeCurrent: false);
     }
-
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
+  } catch (e) {
+    // If there's an error, fallback to mock results
+    final fallbackScore = 70;
+    final fallbackAccuracy = 0.7;
+    final isCorrect = false;
+    final fallbackFeedback = 'We made a mistake. It\'s not your fault. Say it again';
+    setState(() {
+      _isListening = false;
+      _isProcessing = true;
+      _lastAccuracy = fallbackAccuracy;
+      _lastWasCorrect = isCorrect;
+      _feedbackMessage = fallbackFeedback;
+    });
+    await attemptController.addAttempt(
+      word: word.text,
+      score: fallbackScore,
+      feedback: fallbackFeedback,
+      transcript: normalizedTranscript,
+      accuracy: fallbackAccuracy,
+      duration: duration,
+    );
+    _advanceToNextWord(removeCurrent: false);
+  } finally {
+    if (mounted) setState(() => _isProcessing = false);
   }
+}
 
   Future<void> _markWordMastered(WordItem word) async {
     final list = _wordLists[_currentListIndex];
@@ -421,51 +441,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
   }
 
   String _masteredKeyForUser(String userId) => 'practice_mastered_$userId';
-
-  double _calculateSimilarity(String expected, String actual) {
-    if (expected.isEmpty || actual.isEmpty) return 0;
-    if (expected == actual) return 1;
-
-    final m = expected.length;
-    final n = actual.length;
-    final dp = List.generate(m + 1, (_) => List<int>.filled(n + 1, 0));
-
-    for (var i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-    for (var j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-
-    for (var i = 1; i <= m; i++) {
-      for (var j = 1; j <= n; j++) {
-        final cost = expected[i - 1] == actual[j - 1] ? 0 : 1;
-        dp[i][j] = min(
-          min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
-          dp[i - 1][j - 1] + cost,
-        );
-      }
-    }
-
-    final distance = dp[m][n];
-    final maxLen = max(m, n).toDouble();
-    return (maxLen - distance) / maxLen;
-  }
-
-  String _feedbackForScore(int score, bool noTranscript) {
-    if (noTranscript) {
-      return 'I did not catch that. Let\'s try again.';
-    }
-    if (score >= 95) {
-      return 'Excellent pronunciation!';
-    } else if (score >= 85) {
-      return 'Great job! Keep it up.';
-    } else if (score >= 70) {
-      return 'Pretty good. Try speaking clearly on the tricky sounds.';
-    } else {
-      return 'Let\'s try again. Focus on each sound of the word.';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -595,6 +570,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                 feedback: _feedbackMessage!,
                 accuracy: _lastAccuracy,
                 wasCorrect: _lastWasCorrect,
+                phonemeFeedback: _phonemeFeedback,
               ),
             ],
             if (_lastWasCorrect == false && !_isListening && !_isProcessing) ...[
@@ -791,40 +767,38 @@ class _ResultSummary extends StatelessWidget {
   final String feedback;
   final double accuracy;
   final bool? wasCorrect;
+  final String? phonemeFeedback; 
 
   const _ResultSummary({
     required this.transcript,
     required this.feedback,
     required this.accuracy,
     required this.wasCorrect,
+    required this.phonemeFeedback,
   });
 
   @override
   Widget build(BuildContext context) {
     final scoreText = 'Score: ${(accuracy * 100).clamp(0, 100).round()}%';
-    final color = wasCorrect == true
-        ? Colors.green
-        : wasCorrect == false
-            ? Colors.orange
-            : Colors.black;
-
+    final color = wasCorrect == true ? Colors.green : wasCorrect == false ? Colors.orange : Colors.black;
     return Card(
       color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(scoreText, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 8),
-            Text(feedback, style: const TextStyle(fontSize: 16)),
-            if (transcript.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('You said:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(transcript, style: const TextStyle(fontSize: 16)),
-            ],
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(scoreText, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 8),
+          Text(feedback, style: const TextStyle(fontSize: 16)),
+          if (transcript.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('You said:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(transcript, style: const TextStyle(fontSize: 16)),
           ],
-        ),
+          if (phonemeFeedback != null) ...[
+            const SizedBox(height: 8),
+            Text('Tip: $phonemeFeedback', style: const TextStyle(fontSize: 14, color: Colors.blue)),
+          ],
+        ]),
       ),
     );
   }
