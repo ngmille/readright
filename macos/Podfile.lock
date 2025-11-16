@@ -5,6 +5,8 @@ PODS:
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - share_plus (0.0.1):
+    - FlutterMacOS
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -15,6 +17,7 @@ DEPENDENCIES:
   - connectivity_plus (from `Flutter/ephemeral/.symlinks/plugins/connectivity_plus/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
+  - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
   - speech_to_text_macos (from `Flutter/ephemeral/.symlinks/plugins/speech_to_text_macos/macos`)
 
@@ -25,6 +28,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   path_provider_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin
+  share_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
   shared_preferences_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin
   speech_to_text_macos:
@@ -34,6 +39,7 @@ SPEC CHECKSUMS:
   connectivity_plus: 4adf20a405e25b42b9c9f87feff8f4b6fde18a4e
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
+  share_plus: 510bf0af1a42cd602274b4629920c9649c52f4cc
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   speech_to_text_macos: cb920dff8288c218a7e8c96c8c931b17e801dae7
 
