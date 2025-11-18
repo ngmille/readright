@@ -2,14 +2,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-//Screens
+// Screens
 import 'login_screen.dart';
 import 'word_list_screen.dart';
 import 'practice_screen.dart';
 import 'feedback_screen.dart';
 import 'progress_screen.dart';
 
-//Services
+// Services
 import 'services/auth_service.dart';
 import 'services/attempt_repository.dart';
 
@@ -29,7 +29,8 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthController>.value(value: authController),
-        ChangeNotifierProvider<AttemptController>.value(value: attemptController),
+        ChangeNotifierProvider<AttemptController>.value(
+            value: attemptController),
       ],
       child: const ReadRightApp(),
     ),
@@ -74,10 +75,13 @@ class _AppNavigatorState extends State<AppNavigator> {
     return Consumer<AuthController>(
       builder: (context, auth, _) {
         final destinations = _buildDestinations(auth);
+
+        // Keep tab index in range
         if (_tabController.index >= destinations.length) {
           _tabController.index = destinations.length - 1;
         }
 
+        // If only one screen (before login), just show it without a tab bar.
         if (destinations.length <= 1) {
           return destinations.first.screen;
         }
@@ -103,39 +107,95 @@ class _AppNavigatorState extends State<AppNavigator> {
     );
   }
 
+  /// Build navigation destinations depending on auth state and role.
+  ///
+  /// - Not authenticated: only Account/Login (Identify step)
+  /// - Student: simple, kid-friendly tabs (Home, Practice, Progress)
+  /// - Teacher: full set of tabs (Account, Words, Practice, Feedback, Progress)
   List<_NavDestination> _buildDestinations(AuthController auth) {
-    final destinations = <_NavDestination>[
-      const _NavDestination(
-        screen: LoginScreen(),
-        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_crop_circle), label: 'Account'),
-      ),
-    ];
-
-    if (!auth.isAuthenticated) {
-      return destinations;
+    // 1) Not logged in yet → IDENTIFY (login screen only)
+    if (!auth.isAuthenticated || auth.currentUser == null) {
+      return [
+        _NavDestination(
+          screen: const LoginScreen(),
+          item: const BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.person_crop_circle),
+            label: 'Account',
+          ),
+        ),
+      ];
     }
 
-    destinations.addAll(const [
-      _NavDestination(
-        screen: WordListScreen(),
-        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.list_bullet), label: 'Words'),
-      ),
-      _NavDestination(
-        screen: PracticeScreen(),
-        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.mic), label: 'Practice'),
-      ),
-      _NavDestination(
-        screen: FeedbackScreen(),
-        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.chat_bubble_text), label: 'Feedback'),
-      ),
-      _NavDestination(
-        screen: ProgressScreen(),
-        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_square), label: 'Progress'),
-      ),
-    ]);
+    final user = auth.currentUser!;
 
+    // 2) STUDENT VIEW — simple, elementary-friendly navigation
+    if (user.role == UserRole.student) {
+      return [
+        // Home = Welcome screen with "Let's get started!" button.
+        _NavDestination(
+          screen: const LoginScreen(),
+          item: const BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.house_fill),
+            label: 'Home',
+          ),
+        ),
+        // Direct path to practice: big word + mic button.
+        _NavDestination(
+          screen: const PracticeScreen(),
+          item: const BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.mic_fill),
+            label: 'Practice',
+          ),
+        ),
+        // Simple progress view: stars / charts / badges.
+        _NavDestination(
+          screen: const ProgressScreen(),
+          item: const BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.star_fill),
+            label: 'Progress',
+          ),
+        ),
+      ];
+    }
 
-    return destinations;
+    // 3) TEACHER VIEW — full navigation (more complex tools)
+    return [
+      _NavDestination(
+        screen: const LoginScreen(),
+        item: const BottomNavigationBarItem(
+          icon: Icon(CupertinoIcons.person_crop_circle),
+          label: 'Account',
+        ),
+      ),
+      _NavDestination(
+        screen: const WordListScreen(),
+        item: const BottomNavigationBarItem(
+          icon: Icon(CupertinoIcons.list_bullet),
+          label: 'Words',
+        ),
+      ),
+      _NavDestination(
+        screen: const PracticeScreen(),
+        item: const BottomNavigationBarItem(
+          icon: Icon(CupertinoIcons.mic),
+          label: 'Practice',
+        ),
+      ),
+      _NavDestination(
+        screen: const FeedbackScreen(),
+        item: const BottomNavigationBarItem(
+          icon: Icon(CupertinoIcons.chat_bubble_text),
+          label: 'Feedback',
+        ),
+      ),
+      _NavDestination(
+        screen: const ProgressScreen(),
+        item: const BottomNavigationBarItem(
+          icon: Icon(CupertinoIcons.chart_bar_square),
+          label: 'Progress',
+        ),
+      ),
+    ];
   }
 }
 

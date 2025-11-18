@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import 'services/auth_service.dart';
+import 'practice_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,6 +39,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (auth.isAuthenticated) {
           final user = auth.currentUser!;
+          final isStudent = user.role == UserRole.student;
+
           return CupertinoPageScaffold(
             navigationBar: CupertinoNavigationBar(
               middle: const Text('Account'),
@@ -83,12 +86,29 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 24),
                           Text(
-                            'Use the tabs below to continue practicing.',
+                            'Lets get started.',
                             style: CupertinoTheme.of(context)
                                 .textTheme
                                 .textStyle
                                 .copyWith(color: CupertinoColors.secondaryLabel),
                           ),
+                          const SizedBox(height: 24),
+
+                          // Show "Let's get started!" only if the user is a student
+                          if (isStudent)
+                            SizedBox(
+                              width: double.infinity,
+                              child: CupertinoButton.filled(
+                                child: const Text("Let's get started!"),
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    CupertinoPageRoute(
+                                      builder: (_) => const PracticeScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -128,23 +148,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Choose a role to auto-fill demo credentials or enter your own.',
-                            style: CupertinoTheme.of(context).textTheme.textStyle,
+                            'Who are you?',
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .copyWith(fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 16),
-                          CupertinoSlidingSegmentedControl<UserRole>(
-                            groupValue: _selectedRole,
-                            children: const {
-                              UserRole.student: Text('Student'),
-                              UserRole.teacher: Text('Teacher'),
-                            },
-                            onValueChanged: (role) {
-                              if (role != null) {
-                                _applyMockCredentials(role);
-                              }
-                            },
-                          ),
+
+                          // 🔹 Cartoon role selector replaces segmented control
+                          _buildRoleSelector(),
                           const SizedBox(height: 24),
+
                           CupertinoFormSection.insetGrouped(
                             backgroundColor: CupertinoColors.systemBackground,
                             children: [
@@ -158,7 +173,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   }
                                   return null;
                                 },
-                                onChanged: (_) => context.read<AuthController>().clearError(),
+                                onChanged: (_) =>
+                                    context.read<AuthController>().clearError(),
                               ),
                               CupertinoTextFormFieldRow(
                                 controller: _passwordController,
@@ -170,7 +186,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   }
                                   return null;
                                 },
-                                onChanged: (_) => context.read<AuthController>().clearError(),
+                                onChanged: (_) =>
+                                    context.read<AuthController>().clearError(),
                               ),
                             ],
                           ),
@@ -179,7 +196,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
                                 auth.errorMessage!,
-                                style: const TextStyle(color: CupertinoColors.destructiveRed),
+                                style: const TextStyle(
+                                  color: CupertinoColors.destructiveRed,
+                                ),
                               ),
                             ),
                           SizedBox(
@@ -193,11 +212,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Demo accounts:\n• student@readright.app / student123\n• teacher@readright.app / teacher123',
+                            'Demo accounts:\n'
+                            '• student@readright.app / student123\n'
+                            '• teacher@readright.app / teacher123',
                             style: CupertinoTheme.of(context)
                                 .textTheme
                                 .textStyle
-                                .copyWith(color: CupertinoColors.secondaryLabel),
+                                .copyWith(
+                                  color: CupertinoColors.secondaryLabel,
+                                ),
                           ),
                         ],
                       ),
@@ -259,5 +282,87 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     context.read<AuthController>().clearError();
+  }
+
+  /// Cartoon role selector using monkey icons
+  Widget _buildRoleSelector() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _RoleButton(
+          label: "I'm a Student",
+          imagePath: 'assets/icons/Studentmonkey.png',
+          selected: _selectedRole == UserRole.student,
+          onTap: () {
+            _applyMockCredentials(UserRole.student);
+          },
+        ),
+        _RoleButton(
+          label: "I'm a Teacher",
+          imagePath: 'assets/icons/Teachermonkey.png',
+          selected: _selectedRole == UserRole.teacher,
+          onTap: () {
+            _applyMockCredentials(UserRole.teacher);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _RoleButton extends StatelessWidget {
+  final String label;
+  final String imagePath;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RoleButton({
+    required this.label,
+    required this.imagePath,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 110,
+            height: 110,
+            decoration: BoxDecoration(
+              color: selected
+                  ? CupertinoColors.activeBlue.withOpacity(0.15)
+                  : CupertinoColors.systemGrey5,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected
+                    ? CupertinoColors.activeBlue
+                    : CupertinoColors.systemGrey4,
+                width: 3,
+              ),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: Image.asset(
+              imagePath,
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: selected
+                  ? CupertinoColors.activeBlue
+                  : CupertinoColors.label,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
