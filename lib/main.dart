@@ -175,20 +175,6 @@ class _AppNavigatorState extends State<AppNavigator> {
         ),
       ),
       _NavDestination(
-        screen: const PracticeScreen(),
-        item: const BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.mic),
-          label: 'Practice',
-        ),
-      ),
-      _NavDestination(
-        screen: const FeedbackScreen(),
-        item: const BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.chat_bubble_text),
-          label: 'Feedback',
-        ),
-      ),
-      _NavDestination(
         screen: const ProgressScreen(),
         item: const BottomNavigationBarItem(
           icon: Icon(CupertinoIcons.chart_bar_square),
