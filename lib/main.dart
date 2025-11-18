@@ -93,7 +93,10 @@ class _AppNavigatorState extends State<AppNavigator> {
             onTap: (index) => setState(() => _tabController.index = index),
           ),
           tabBuilder: (context, index) {
-            return destinations[index].screen;
+            final destination = destinations[index];
+            return CupertinoTabView(
+              builder: (_) => destination.screen,
+            );
           },
         );
       },
