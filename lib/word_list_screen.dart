@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'models/word_model.dart';
 import 'word_detail_screen.dart';
 
@@ -20,17 +20,15 @@ class _WordListScreenState extends State<WordListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-      appBar: AppBar(
-        title: const Text('Word Lists'),
-        backgroundColor: Colors.white,
+    return CupertinoPageScaffold(
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text('Word Lists'),
       ),
-      body: FutureBuilder<List<WordList>>(
+      child: FutureBuilder<List<WordList>>(
         future: _wordListsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CupertinoActivityIndicator());
           }
           if (snapshot.hasError) {
             return Center(child: Text('Error loading words: ${snapshot.error}'));
@@ -40,26 +38,63 @@ class _WordListScreenState extends State<WordListScreen> {
           }
 
           final wordLists = snapshot.data!;
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: wordLists.length,
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             itemBuilder: (context, index) {
               final list = wordLists[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                child: ListTile(
-                  title: Text(list.title),
-                  subtitle: Text('${list.items.length} words • ${list.category.toUpperCase()}'),
-                  trailing: const Icon(Icons.arrow_forward),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => WordDetailScreen(wordList: list),
+              return GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  CupertinoPageRoute(
+                    builder: (context) => WordDetailScreen(wordList: list),
+                  ),
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: CupertinoColors.systemGrey4,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                list.title,
+                                style: CupertinoTheme.of(context)
+                                    .textTheme
+                                    .textStyle
+                                    .copyWith(fontSize: 18, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${list.items.length} words • ${list.category.toUpperCase()}',
+                                style: CupertinoTheme.of(context)
+                                    .textTheme
+                                    .textStyle
+                                    .copyWith(color: CupertinoColors.secondaryLabel),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(CupertinoIcons.chevron_forward),
+                      ],
                     ),
                   ),
                 ),
               );
             },
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemCount: wordLists.length,
           );
         },
       ),

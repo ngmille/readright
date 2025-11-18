@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:readright/services/pronunciation_service.dart';
@@ -447,59 +447,44 @@ class _PracticeScreenState extends State<PracticeScreen> {
     final attemptController = context.watch<AttemptController>();
 
     if (_loading) {
-      return Scaffold(
-        backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-        appBar: AppBar(
-          title: const Text('Practice'),
-          backgroundColor: Colors.white,
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
+      return _buildPracticePage(const Center(child: CupertinoActivityIndicator()));
     }
 
     if (_micPermission?.isPermanentlyDenied == true ||
         _speechPermission?.isPermanentlyDenied == true) {
-      return _buildPermissionScaffold(
+      return _buildPermissionPage(
         message:
             'Speech recognition permissions are blocked. Please enable them in Settings to continue practicing.',
       );
     }
 
     if (!_speechReady) {
-      return _buildPermissionScaffold(
+      return _buildPermissionPage(
         message: _errorMessage ?? 'Tap the button below to enable speech recognition.',
       );
     }
 
     if (_allListsComplete) {
-      return Scaffold(
-        backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-        appBar: AppBar(
-          title: const Text('Practice'),
-          backgroundColor: Colors.white,
-        ),
-        body: Center(
+      return _buildPracticePage(
+        Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.emoji_events, color: Colors.amber, size: 64),
-                    SizedBox(height: 16),
-                    Text(
-                      'List complete!',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'You mastered every word. Fantastic work!',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
+            child: _CupertinoCard(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(CupertinoIcons.star_circle, color: CupertinoColors.systemYellow, size: 64),
+                  SizedBox(height: 16),
+                  Text(
+                    'List complete!',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'You mastered every word. Fantastic work!',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
           ),
@@ -508,14 +493,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
     }
 
     if (_currentQueue.isEmpty) {
-      return Scaffold(
-        backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-        appBar: AppBar(
-          title: const Text('Practice'),
-          backgroundColor: Colors.white,
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
+      return _buildPracticePage(const Center(child: CupertinoActivityIndicator()));
     }
 
     final currentList = _wordLists[_currentListIndex];
@@ -525,13 +503,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
         .length;
     final totalCount = currentList.items.length;
 
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-      appBar: AppBar(
-        title: const Text('Practice'),
-        backgroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
+    return _buildPracticePage(
+      SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -559,7 +532,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
               const SizedBox(height: 12),
               Text(
                 _errorMessage!,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: CupertinoColors.destructiveRed),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -575,10 +548,10 @@ class _PracticeScreenState extends State<PracticeScreen> {
             ],
             if (_lastWasCorrect == false && !_isListening && !_isProcessing) ...[
               const SizedBox(height: 16),
-              OutlinedButton.icon(
+              CupertinoButton(
                 onPressed: _startListening,
-                icon: const Icon(Icons.replay),
-                label: const Text('Try again'),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: const Text('Try again'),
               ),
             ],
           ],
@@ -587,47 +560,46 @@ class _PracticeScreenState extends State<PracticeScreen> {
     );
   }
 
-  Scaffold _buildPermissionScaffold({required String message}) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-      appBar: AppBar(
-        title: const Text('Practice'),
-        backgroundColor: Colors.white,
-      ),
-      body: Center(
+  Widget _buildPermissionPage({required String message}) {
+    return _buildPracticePage(
+      Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.mic_off, size: 64, color: Colors.redAccent),
-                  const SizedBox(height: 16),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _initSpeech(force: true);
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Try again'),
-                  ),
-                  TextButton(
-                    onPressed: () => openAppSettings(),
-                    child: const Text('Open Settings'),
-                  ),
-                ],
-              ),
+          child: _CupertinoCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(CupertinoIcons.mic_slash_fill, size: 64, color: CupertinoColors.destructiveRed),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                CupertinoButton.filled(
+                  onPressed: () => _initSpeech(force: true),
+                  child: const Text('Try again'),
+                ),
+                const SizedBox(height: 8),
+                CupertinoButton(
+                  onPressed: () => openAppSettings(),
+                  child: const Text('Open Settings'),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPracticePage(Widget child) {
+    return CupertinoPageScaffold(
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text('Practice'),
+      ),
+      child: SafeArea(child: child),
     );
   }
 }
@@ -649,33 +621,43 @@ class _ListProgressHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'List $listPosition of $totalLists',
-              style: const TextStyle(fontSize: 16, color: Colors.deepPurple),
+    final double progress = totalCount == 0 ? 0.0 : (masteredCount / totalCount).clamp(0.0, 1.0).toDouble();
+    final textTheme = CupertinoTheme.of(context).textTheme;
+
+    return _CupertinoCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'List $listPosition of $totalLists',
+            style: textTheme.textStyle.copyWith(color: CupertinoColors.activeBlue),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            listTitle,
+            style: textTheme.navTitleTextStyle.copyWith(fontSize: 22),
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 8,
+              child: Stack(
+                children: [
+                  Container(color: CupertinoColors.systemGrey5),
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress,
+                    child: Container(color: CupertinoColors.activeBlue),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              listTitle,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: totalCount == 0 ? 0 : masteredCount / totalCount,
-              minHeight: 8,
-              backgroundColor: Colors.purple.shade100,
-              color: Colors.deepPurple,
-            ),
-            const SizedBox(height: 8),
-            Text('$masteredCount of $totalCount words mastered'),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text('$masteredCount of $totalCount words mastered'),
+        ],
       ),
     );
   }
@@ -688,28 +670,32 @@ class _WordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              word.text.toUpperCase(),
-              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            const Text('Sample sentences:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ...word.sampleSentences.map(
-              (sentence) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text('• $sentence', style: const TextStyle(fontSize: 16)),
+    final textTheme = CupertinoTheme.of(context).textTheme;
+
+    return _CupertinoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            word.text.toUpperCase(),
+            style: textTheme.navLargeTitleTextStyle.copyWith(fontSize: 36),
+          ),
+          const SizedBox(height: 12),
+          Text('Sample sentences:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ...word.sampleSentences.map(
+            (sentence) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('• '),
+                  Expanded(child: Text(sentence, style: textTheme.textStyle)),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -733,30 +719,32 @@ class _RecordingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = isListening ? 'Stop' : 'Record';
-    final icon = isListening ? Icons.stop : Icons.mic;
+    final icon = isListening ? CupertinoIcons.stop_fill : CupertinoIcons.mic;
     final statusText = isListening
         ? 'Listening... $remainingSeconds s'
         : isProcessing
             ? 'Checking pronunciation...'
             : 'Tap record and say the word clearly.';
 
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(icon, size: 72, color: isListening ? Colors.red : Colors.deepPurple),
-            const SizedBox(height: 12),
-            Text(statusText, style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: canPress ? () => onRecordPressed() : null,
-              icon: Icon(icon),
-              label: Text(label),
+    return _CupertinoCard(
+      child: Column(
+        children: [
+          Icon(icon, size: 72, color: isListening ? CupertinoColors.destructiveRed : CupertinoColors.activeBlue),
+          const SizedBox(height: 12),
+          Text(statusText, style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 16),
+          CupertinoButton.filled(
+            onPressed: canPress ? () => onRecordPressed() : null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18),
+                const SizedBox(width: 8),
+                Text(label),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -780,25 +768,59 @@ class _ResultSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scoreText = 'Score: ${(accuracy * 100).clamp(0, 100).round()}%';
-    final color = wasCorrect == true ? Colors.green : wasCorrect == false ? Colors.orange : Colors.black;
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(scoreText, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+    final color = wasCorrect == true
+        ? CupertinoColors.activeGreen
+        : wasCorrect == false
+            ? CupertinoColors.systemOrange
+            : CupertinoColors.label;
+    final textTheme = CupertinoTheme.of(context).textTheme;
+
+    return _CupertinoCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(scoreText, style: textTheme.navTitleTextStyle.copyWith(fontSize: 20, color: color)),
+        const SizedBox(height: 8),
+        Text(feedback, style: textTheme.textStyle),
+        if (transcript.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('You said:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
+          Text(transcript, style: textTheme.textStyle),
+        ],
+        if (phonemeFeedback != null) ...[
           const SizedBox(height: 8),
-          Text(feedback, style: const TextStyle(fontSize: 16)),
-          if (transcript.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const Text('You said:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text(transcript, style: const TextStyle(fontSize: 16)),
-          ],
-          if (phonemeFeedback != null) ...[
-            const SizedBox(height: 8),
-            Text('Tip: $phonemeFeedback', style: const TextStyle(fontSize: 14, color: Colors.blue)),
-          ],
-        ]),
+          Text('Tip: $phonemeFeedback',
+              style: textTheme.textStyle.copyWith(color: CupertinoColors.activeBlue, fontSize: 14)),
+        ],
+      ]),
+    );
+  }
+}
+
+class _CupertinoCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  const _CupertinoCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(24),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: CupertinoColors.systemGrey4,
+            blurRadius: 10,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: padding,
+        child: child,
       ),
     );
   }

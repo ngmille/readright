@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,26 +41,14 @@ class ReadRightApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return CupertinoApp(
       title: 'ReadRight',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        scaffoldBackgroundColor: const Color.fromARGB(255, 174, 98, 186),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.deepPurple,
-          foregroundColor: Colors.purple,
+      theme: const CupertinoThemeData(
+        primaryColor: CupertinoColors.activeBlue,
+        barBackgroundColor: CupertinoColors.systemGrey6,
+        scaffoldBackgroundColor: CupertinoColors.systemGroupedBackground,
       ),
-      useMaterial3: true,
-      ),
-
       home: const AppNavigator(),
-      routes: {
-        '/login': (_) => const LoginScreen(),
-        '/word_list': (_) => const WordListScreen(),
-        '/practice': (_) => const PracticeScreen(),
-        '/feedback': (_) => const FeedbackScreen(),
-        '/progress': (_) => const ProgressScreen(),
-      },
     );
   }
 }
@@ -73,33 +61,40 @@ class AppNavigator extends StatefulWidget {
 }
 
 class _AppNavigatorState extends State<AppNavigator> {
-  int _index = 0;
+  final CupertinoTabController _tabController = CupertinoTabController();
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, auth, _) {
         final destinations = _buildDestinations(auth);
-        if (_index >= destinations.length) {
-          _index = destinations.length - 1;
+        if (_tabController.index >= destinations.length) {
+          _tabController.index = destinations.length - 1;
         }
 
-        final showBottomNav = destinations.length > 1;
+        if (destinations.length <= 1) {
+          return destinations.first.screen;
+        }
 
-        return Scaffold(
-          body: destinations[_index].screen,
-          bottomNavigationBar: showBottomNav
-              ? BottomNavigationBar(
-                  type: BottomNavigationBarType.fixed,
-                  currentIndex: _index,
-                  onTap: (i) => setState(() => _index = i),
-                  selectedItemColor: Colors.purple,
-                  unselectedItemColor: Colors.grey,
-                  backgroundColor: Colors.white,
-                  showUnselectedLabels: true,
-                  items: destinations.map((dest) => dest.item).toList(),
-                )
-              : null,
+        return CupertinoTabScaffold(
+          controller: _tabController,
+          tabBar: CupertinoTabBar(
+            items: destinations.map((dest) => dest.item).toList(),
+            activeColor: CupertinoColors.activeBlue,
+            inactiveColor: CupertinoColors.inactiveGray,
+            backgroundColor: CupertinoColors.systemGrey6,
+            iconSize: 24,
+            onTap: (index) => setState(() => _tabController.index = index),
+          ),
+          tabBuilder: (context, index) {
+            return destinations[index].screen;
+          },
         );
       },
     );
@@ -109,7 +104,7 @@ class _AppNavigatorState extends State<AppNavigator> {
     final destinations = <_NavDestination>[
       const _NavDestination(
         screen: LoginScreen(),
-        item: BottomNavigationBarItem(icon: Icon(Icons.login), label: 'Account'),
+        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_crop_circle), label: 'Account'),
       ),
     ];
 
@@ -120,19 +115,19 @@ class _AppNavigatorState extends State<AppNavigator> {
     destinations.addAll(const [
       _NavDestination(
         screen: WordListScreen(),
-        item: BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Words'),
+        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.list_bullet), label: 'Words'),
       ),
       _NavDestination(
         screen: PracticeScreen(),
-        item: BottomNavigationBarItem(icon: Icon(Icons.mic), label: 'Practice'),
+        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.mic), label: 'Practice'),
       ),
       _NavDestination(
         screen: FeedbackScreen(),
-        item: BottomNavigationBarItem(icon: Icon(Icons.feedback), label: 'Feedback'),
+        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.chat_bubble_text), label: 'Feedback'),
       ),
       _NavDestination(
         screen: ProgressScreen(),
-        item: BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Progress'),
+        item: BottomNavigationBarItem(icon: Icon(CupertinoIcons.chart_bar_square), label: 'Progress'),
       ),
     ]);
 

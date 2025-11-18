@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'models/word_model.dart';
 
 class WordDetailScreen extends StatelessWidget {
@@ -8,37 +8,79 @@ class WordDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-      appBar: AppBar(
-        title: Text(wordList.title),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(wordList.title),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: wordList.items.length,
-        itemBuilder: (context, index) {
-          final item = wordList.items[index];
-          final patternText = item.pattern?.isNotEmpty == true ? 'Pattern: ${item.pattern}' : '';
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            child: ExpansionTile(
-              title: Text(
-                item.text.toUpperCase(),
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      child: SafeArea(
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          itemCount: wordList.items.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final item = wordList.items[index];
+            final patternText = item.pattern?.isNotEmpty == true ? 'Pattern: ${item.pattern}' : null;
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemBackground,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(
+                    color: CupertinoColors.systemGrey4,
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
               ),
-              subtitle: Text(patternText),
-              children: item.sampleSentences.map((sentence) => Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  '• $sentence',
-                  style: const TextStyle(fontSize: 16),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.text.toUpperCase(),
+                      style: CupertinoTheme.of(context)
+                          .textTheme
+                          .navLargeTitleTextStyle
+                          .copyWith(fontSize: 28),
+                    ),
+                    if (patternText != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        patternText,
+                        style: CupertinoTheme.of(context)
+                            .textTheme
+                            .textStyle
+                            .copyWith(color: CupertinoColors.secondaryLabel),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ...item.sampleSentences.map(
+                      (sentence) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('• '),
+                            Expanded(
+                              child: Text(
+                                sentence,
+                                style: CupertinoTheme.of(context)
+                                    .textTheme
+                                    .textStyle
+                                    .copyWith(fontSize: 16),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              )).toList(),
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import 'services/auth_service.dart';
@@ -28,43 +28,70 @@ class _LoginScreenState extends State<LoginScreen> {
     return Consumer<AuthController>(
       builder: (context, auth, _) {
         if (auth.isInitializing) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return const CupertinoPageScaffold(
+            navigationBar: CupertinoNavigationBar(
+              middle: Text('Account'),
+            ),
+            child: Center(child: CupertinoActivityIndicator()),
           );
         }
 
         if (auth.isAuthenticated) {
           final user = auth.currentUser!;
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Account'),
-              backgroundColor: Colors.white,
-              actions: [
-                TextButton(
-                  onPressed: () => auth.signOut(),
-                  child: const Text('Sign out'),
-                ),
-              ],
+          return CupertinoPageScaffold(
+            navigationBar: CupertinoNavigationBar(
+              middle: const Text('Account'),
+              trailing: CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => auth.signOut(),
+                child: const Text('Sign out'),
+              ),
             ),
-            backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-            body: Center(
-              child: Card(
-                margin: const EdgeInsets.all(24),
+            child: SafeArea(
+              child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome back, ${user.displayName}!',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemBackground,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: CupertinoColors.systemGrey4,
+                          blurRadius: 12,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Welcome back, ${user.displayName}!',
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .navTitleTextStyle
+                                .copyWith(fontSize: 22),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Role: ${user.role == UserRole.teacher ? 'Teacher' : 'Student'}',
+                            style: CupertinoTheme.of(context).textTheme.textStyle,
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            'Use the tabs below to continue practicing.',
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .copyWith(color: CupertinoColors.secondaryLabel),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      Text('Role: ${user.role == UserRole.teacher ? 'Teacher' : 'Student'}'),
-                      const SizedBox(height: 24),
-                      const Text('Use the navigation below to continue.'),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -72,97 +99,108 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
 
-        return Scaffold(
-          backgroundColor: const Color.fromARGB(255, 174, 98, 186),
-          appBar: AppBar(
-            title: const Text('Sign in'),
-            backgroundColor: Colors.white,
+        return CupertinoPageScaffold(
+          navigationBar: const CupertinoNavigationBar(
+            middle: Text('Sign in'),
           ),
-          body: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Choose a role to auto-fill demo credentials or enter your own.',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 12,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Student'),
-                              selected: _selectedRole == UserRole.student,
-                              onSelected: (_) => _applyMockCredentials(UserRole.student),
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: CupertinoColors.systemGrey4,
+                        blurRadius: 12,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Choose a role to auto-fill demo credentials or enter your own.',
+                            style: CupertinoTheme.of(context).textTheme.textStyle,
+                          ),
+                          const SizedBox(height: 16),
+                          CupertinoSlidingSegmentedControl<UserRole>(
+                            groupValue: _selectedRole,
+                            children: const {
+                              UserRole.student: Text('Student'),
+                              UserRole.teacher: Text('Teacher'),
+                            },
+                            onValueChanged: (role) {
+                              if (role != null) {
+                                _applyMockCredentials(role);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                          CupertinoFormSection.insetGrouped(
+                            backgroundColor: CupertinoColors.systemBackground,
+                            children: [
+                              CupertinoTextFormFieldRow(
+                                controller: _emailController,
+                                placeholder: 'Email',
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Email is required';
+                                  }
+                                  return null;
+                                },
+                                onChanged: (_) => context.read<AuthController>().clearError(),
+                              ),
+                              CupertinoTextFormFieldRow(
+                                controller: _passwordController,
+                                placeholder: 'Password',
+                                obscureText: true,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Password is required';
+                                  }
+                                  return null;
+                                },
+                                onChanged: (_) => context.read<AuthController>().clearError(),
+                              ),
+                            ],
+                          ),
+                          if (auth.errorMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                auth.errorMessage!,
+                                style: const TextStyle(color: CupertinoColors.destructiveRed),
+                              ),
                             ),
-                            ChoiceChip(
-                              label: const Text('Teacher'),
-                              selected: _selectedRole == UserRole.teacher,
-                              onSelected: (_) => _applyMockCredentials(UserRole.teacher),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(labelText: 'Email'),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'Email is required';
-                            }
-                            return null;
-                          },
-                          onChanged: (_) => context.read<AuthController>().clearError(),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          decoration: const InputDecoration(labelText: 'Password'),
-                          obscureText: true,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Password is required';
-                            }
-                            return null;
-                          },
-                          onChanged: (_) => context.read<AuthController>().clearError(),
-                        ),
-                        const SizedBox(height: 16),
-                        if (auth.errorMessage != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              auth.errorMessage!,
-                              style: const TextStyle(color: Colors.red),
+                          SizedBox(
+                            width: double.infinity,
+                            child: CupertinoButton.filled(
+                              onPressed: auth.isSubmitting ? null : _submitForm,
+                              child: auth.isSubmitting
+                                  ? const CupertinoActivityIndicator()
+                                  : const Text('Sign in'),
                             ),
                           ),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: auth.isSubmitting ? null : _submitForm,
-                            child: auth.isSubmitting
-                                ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Text('Sign in'),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Demo accounts:\n• student@readright.app / student123\n• teacher@readright.app / teacher123',
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .copyWith(color: CupertinoColors.secondaryLabel),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Demo accounts:\n• student@readright.app / student123\n• teacher@readright.app / teacher123',
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -189,8 +227,18 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to sign in. Please try again.')),
+      showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Unable to sign in'),
+          content: const Text('Please check your credentials and try again.'),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
     }
   }
