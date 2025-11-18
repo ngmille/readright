@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+//Screens
 import 'login_screen.dart';
 import 'word_list_screen.dart';
 import 'practice_screen.dart';
 import 'feedback_screen.dart';
 import 'progress_screen.dart';
-import 'teacher_dashboard_screen.dart';
+
+//Services
 import 'services/auth_service.dart';
 import 'services/attempt_repository.dart';
 
@@ -58,7 +60,6 @@ class ReadRightApp extends StatelessWidget {
         '/practice': (_) => const PracticeScreen(),
         '/feedback': (_) => const FeedbackScreen(),
         '/progress': (_) => const ProgressScreen(),
-        '/teacher_dashboard': (_) => const TeacherDashboardScreen(),
       },
     );
   }
@@ -135,12 +136,6 @@ class _AppNavigatorState extends State<AppNavigator> {
       ),
     ]);
 
-    if (auth.currentUser?.role == UserRole.teacher) {
-      destinations.add(const _NavDestination(
-        screen: TeacherDashboardScreen(),
-        item: BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Teacher'),
-      ));
-    }
 
     return destinations;
   }
