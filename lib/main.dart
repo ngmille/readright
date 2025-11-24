@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 import 'word_list_screen.dart';
 import 'practice_screen.dart';
-import 'feedback_screen.dart';
 import 'progress_screen.dart';
 
 // Services
