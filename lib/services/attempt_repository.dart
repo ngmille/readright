@@ -90,7 +90,7 @@ class AttemptController extends ChangeNotifier {
 
   AttemptController({required AttemptRepository repository}) : _repository = repository;
 
-  List<Attempt> get attempts => _attempts;
+  List<Attempt> get attempts => List.unmodifiable([..._attempts]);
   bool get isLoading => _loading;
   bool get isSaving => _saving;
   String? get errorMessage => _error;

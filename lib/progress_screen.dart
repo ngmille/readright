@@ -1,3 +1,4 @@
+// lib/screens/progress_screen.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
@@ -6,8 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
-import 'models/attempt_model.dart';
-import 'services/attempt_repository.dart';
+import 'package:flutter/material.dart';
+import '../models/attempt_model.dart';
+import '../services/attempt_repository.dart';
+import '../services/auth_service.dart';
 
 class ProgressScreen extends StatelessWidget {
   const ProgressScreen({super.key});
@@ -52,10 +55,286 @@ class ProgressScreen extends StatelessWidget {
   }
 }
 
-// Chart widget
+class _ProgressBody extends StatelessWidget {
+  final AttemptController controller;
+
+  const _ProgressBody({required this.controller});
+
+  Widget _buildAnalyticsTab(List<Attempt> attempts, BuildContext context) {
+    final isTeacher = context.read<AuthController>().currentUser?.role == UserRole.teacher;
+
+    return Material(                          
+      color: Colors.transparent,
+      child: Localizations(
+        locale: const Locale('en', 'US'),
+        delegates: const [
+          DefaultMaterialLocalizations.delegate,
+          DefaultWidgetsLocalizations.delegate,
+          DefaultCupertinoLocalizations.delegate,
+        ],
+        child: DefaultTabController(
+          length: isTeacher ? 2 : 1,
+          child: Column(
+            children: [
+              Container(
+                color: CupertinoColors.systemBackground.resolveFrom(context),
+                child: TabBar(
+                  labelColor: CupertinoColors.activeBlue,
+                  unselectedLabelColor: CupertinoColors.secondaryLabel,
+                  indicatorColor: CupertinoColors.activeBlue,
+                  indicatorWeight: 3,
+                  labelPadding: const EdgeInsets.symmetric(vertical: 12),
+                  tabs: isTeacher
+                      ? const [
+                          Tab(text: 'Improvement Trends'),
+                          Tab(text: 'Most Missed Words'),
+                        ]
+                      : const [Tab(text: 'Improvement Trends')],
+                ),
+              ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Container(
+                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                    child: TabBarView(
+                      children: isTeacher
+                          ? [
+                              _buildTrendsChart(attempts),
+                              _buildMissedWordsTable(attempts),
+                            ]
+                          : [_buildTrendsChart(attempts)],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+    Widget _buildTrendsChart(List<Attempt> attempts) {
+      if (attempts.isEmpty) {
+        return const Center(child: Text('No data yet. Keep practicing!'));
+      }
+
+      // Group by average score by day
+      final Map<DateTime, List<double>> dayToScores = {};
+
+      for (final attempt in attempts) {
+        final day = DateTime(
+          attempt.createdAt.year,
+          attempt.createdAt.month,
+          attempt.createdAt.day,
+        );
+        dayToScores.putIfAbsent(day, () => []).add(attempt.score.toDouble());
+      }
+
+      var dailyAverages = dayToScores.entries.map((e) {
+        final avg = e.value.reduce((a, b) => a + b) / e.value.length;
+        return {'date': e.key, 'score': avg};
+      }).toList();
+
+      dailyAverages.sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+
+      // Take last 14 days max
+      final recent = dailyAverages.length > 14
+          ? dailyAverages.sublist(dailyAverages.length - 14)
+          : dailyAverages;
+
+      final spots = recent.asMap().entries.map((e) {
+        final index = e.key;
+        final score = e.value['score'] as double;
+        return FlSpot(index.toDouble(), score);
+      }).toList();
+
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: LineChart(
+          LineChartData(
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                color: CupertinoColors.activeBlue,
+                barWidth: 4,
+                dotData: const FlDotData(show: true),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: CupertinoColors.activeBlue.withOpacity(0.2),
+                ),
+              ),
+            ],
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 36,
+                  interval: 1,
+                  getTitlesWidget: (double value, TitleMeta meta) {
+                    final index = value.toInt();
+                    if (index < 0 || index >= recent.length) {
+                      return const SizedBox.shrink();
+                    }
+                    final date = recent[index]['date'] as DateTime;
+                    final text = DateFormat('MMM d').format(date);
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        text,
+                        style: const TextStyle(fontSize: 11, color: CupertinoColors.secondaryLabel),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+              ),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            gridData: const FlGridData(show: true),
+            borderData: FlBorderData(show: true),
+            minY: 0,
+            maxY: 100,
+          ),
+        ),
+      );
+    }
+
+  Widget _buildMissedWordsTable(List<Attempt> attempts) {
+    if (attempts.isEmpty) {
+      return const Center(child: Text('No attempts recorded.'));
+    }
+
+    final Map<String, List<Attempt>> grouped = {};
+    for (final attempt in attempts) {
+      grouped.putIfAbsent(attempt.wordText, () => []).add(attempt);
+    }
+
+    final missedWords = grouped.entries.map((e) {
+      final word = e.key;
+      final attemptsList = e.value;
+      final avgScore = attemptsList.map((a) => a.score).reduce((a, b) => a + b) / attemptsList.length;
+      return {
+        'word': word,
+        'attempts': attemptsList.length,
+        'avgScore': avgScore,
+      };
+    }).where((e) => e['avgScore'] as double < 80).toList();
+
+    missedWords.sort((a, b) {
+      final aCount = a['attempts'] as int;
+      final bCount = b['attempts'] as int;
+      return bCount.compareTo(aCount); // Most attempted first
+    });
+
+    final top5 = missedWords.take(5).toList();
+
+    if (top5.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'Great job!\nNo consistently missed words.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Table(
+        border: TableBorder.all(
+          color: CupertinoColors.systemGrey4,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        children: [
+          const TableRow(
+            decoration: BoxDecoration(color: CupertinoColors.systemGrey5),
+            children: [
+              Padding(padding: EdgeInsets.all(12), child: Text('Word', style: TextStyle(fontWeight: FontWeight.bold))),
+              Padding(padding: EdgeInsets.all(12), child: Text('Attempts', style: TextStyle(fontWeight: FontWeight.bold))),
+              Padding(padding: EdgeInsets.all(12), child: Text('Avg Score', style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+          ),
+          ...top5.map((row) => TableRow(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(row['word'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  Padding(padding: const EdgeInsets.all(12), child: Text('${row['attempts']}')),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      '${(row['avgScore'] as double).toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: (row['avgScore'] as double) < 70 ? CupertinoColors.destructiveRed : CupertinoColors.systemOrange,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              )),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final attempts = controller.attempts;
+    final textTheme = CupertinoTheme.of(context).textTheme;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary cards
+          Row(
+            children: [
+              Expanded(child: _InfoCard(title: 'Total Attempts', value: '${controller.totalAttempts}')),
+              const SizedBox(width: 16),
+              Expanded(child: _InfoCard(title: 'Average Score', value: '${controller.averageScore.toStringAsFixed(1)}%')),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Recent scores bar chart
+          Text('Recent Scores', style: textTheme.navTitleTextStyle.copyWith(fontSize: 20)),
+          const SizedBox(height: 16),
+          SizedBox(height: 200, child: RecentScoresChart(attempts: attempts)),
+          const SizedBox(height: 24),
+
+          // Recent attempts list
+          Text('Recent Attempts', style: textTheme.navTitleTextStyle.copyWith(fontSize: 20)),
+          const SizedBox(height: 8),
+          ...attempts.take(5).map((attempt) => _AttemptTile(attempt: attempt)),
+
+          const SizedBox(height: 32),
+
+          // Analytics
+          Text('Analytics', style: textTheme.navTitleTextStyle.copyWith(fontSize: 22)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 420,
+            child: _buildAnalyticsTab(attempts, context),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class RecentScoresChart extends StatelessWidget {
   final List<Attempt> attempts;
-
   const RecentScoresChart({super.key, required this.attempts});
 
   @override
@@ -80,26 +359,98 @@ class RecentScoresChart extends StatelessWidget {
       BarChartData(
         barGroups: barGroups,
         maxY: 100,
-        backgroundColor: CupertinoColors.systemBackground,
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) => Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Day ${value + 1}', style: const TextStyle(fontSize: 12)),
+                child: Text('Day ${value.toInt() + 1}', style: const TextStyle(fontSize: 12)),
               ),
             ),
           ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: true, reservedSize: 40),
-          ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
         ),
         borderData: FlBorderData(show: true),
         gridData: const FlGridData(show: true),
         barTouchData: BarTouchData(enabled: false),
+      ),
+    );
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  final String title;
+  final String value;
+  const _InfoCard({required this.title, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = CupertinoTheme.of(context).textTheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: CupertinoColors.systemGrey4, blurRadius: 8, offset: Offset(0, 4))],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(title, style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(value, style: textTheme.navTitleTextStyle.copyWith(color: CupertinoColors.activeBlue)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AttemptTile extends StatelessWidget {
+  final Attempt attempt;
+  const _AttemptTile({required this.attempt});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = CupertinoTheme.of(context).textTheme;
+    final badgeColor = attempt.score >= 80 ? CupertinoColors.activeGreen : CupertinoColors.systemOrange;
+    final timestamp =
+        '${attempt.createdAt.month}/${attempt.createdAt.day} ${attempt.createdAt.hour}:${attempt.createdAt.minute.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(color: CupertinoColors.systemGrey4, blurRadius: 8, offset: Offset(0, 4))],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Text('${attempt.score}%', style: textTheme.textStyle.copyWith(color: CupertinoColors.white, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(attempt.wordText.toUpperCase(), style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
+                    Text(attempt.feedback, style: textTheme.textStyle.copyWith(color: CupertinoColors.secondaryLabel)),
+                  ],
+                ),
+              ),
+              Text(timestamp, style: textTheme.textStyle.copyWith(fontSize: 12)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -116,7 +467,6 @@ void _showExportDialog(BuildContext context, AttemptController controller) {
 }
 
 void _exportAttempts(BuildContext context, List<Attempt> allAttempts, DateTime startDate, DateTime endDate, String format) {
-  // Filter by date range (inclusive)
   final filtered = allAttempts.where((attempt) {
     return attempt.createdAt.isAfter(startDate.subtract(const Duration(days: 1))) &&
            attempt.createdAt.isBefore(endDate.add(const Duration(days: 1)));
@@ -125,12 +475,12 @@ void _exportAttempts(BuildContext context, List<Attempt> allAttempts, DateTime s
   if (filtered.isEmpty) {
     showCupertinoDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (_) => CupertinoAlertDialog(
         title: const Text('No attempts found'),
         content: const Text('There are no attempts in the selected date range.'),
         actions: [
           CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('OK'),
           ),
         ],
@@ -139,18 +489,16 @@ void _exportAttempts(BuildContext context, List<Attempt> allAttempts, DateTime s
     return;
   }
 
-  // Generate data rows
   final List<Map<String, dynamic>> dataRows = filtered.map((a) => {
-    'id': a.id,
-    'wordText': a.wordText,
-    'score': a.score,
-    'feedback': a.feedback,
-    'transcript': a.transcript ?? '',
-    'accuracy': a.accuracy?.toStringAsFixed(2) ?? '',
-    'createdAt': DateFormat('yyyy-MM-dd HH:mm:ss').format(a.createdAt),
-  }).toList();
+        'id': a.id,
+        'wordText': a.wordText,
+        'score': a.score,
+        'feedback': a.feedback,
+        'transcript': a.transcript ?? '',
+        'accuracy': a.accuracy?.toStringAsFixed(2) ?? '',
+        'createdAt': DateFormat('yyyy-MM-dd HH:mm:ss').format(a.createdAt),
+      }).toList();
 
-  // Temp file
   final directory = Directory.systemTemp;
   final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
   final fileName = 'readright_attempts_$timestamp.$format';
@@ -159,18 +507,15 @@ void _exportAttempts(BuildContext context, List<Attempt> allAttempts, DateTime s
 
   String content;
   if (format == 'csv') {
-    // CSV with header
     final headers = dataRows.first.keys.toList();
     final csvData = [headers, ...dataRows.map((row) => headers.map((key) => row[key]).toList())];
     content = const ListToCsvConverter().convert(csvData);
   } else {
-    // JSON array
     content = jsonEncode(dataRows);
   }
 
   file.writeAsStringSync(content);
 
-  // Share file
   SharePlus.instance.share(
     ShareParams(
       files: [XFile(path)],
@@ -182,7 +527,6 @@ void _exportAttempts(BuildContext context, List<Attempt> allAttempts, DateTime s
 
 class ExportDialog extends StatefulWidget {
   final Function(DateTime, DateTime, String) onExport;
-
   const ExportDialog({super.key, required this.onExport});
 
   @override
@@ -192,7 +536,7 @@ class ExportDialog extends StatefulWidget {
 class _ExportDialogState extends State<ExportDialog> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 7));
   DateTime _endDate = DateTime.now();
-  String _format = 'csv'; // csv by default
+  String _format = 'csv';
 
   @override
   Widget build(BuildContext context) {
@@ -205,45 +549,22 @@ class _ExportDialogState extends State<ExportDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Export Progress Data',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
+              const Text('Export Progress Data', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
-              _PickerRow(
-                title: 'Start Date',
-                subtitle: DateFormat('MMM dd, yyyy').format(_startDate),
-                onTap: () => _pickDate(context, true),
-              ),
-              _PickerRow(
-                title: 'End Date',
-                subtitle: DateFormat('MMM dd, yyyy').format(_endDate),
-                onTap: () => _pickDate(context, false),
-              ),
+              _PickerRow(title: 'Start Date', subtitle: DateFormat('MMM dd, yyyy').format(_startDate), onTap: () => _pickDate(context, true)),
+              _PickerRow(title: 'End Date', subtitle: DateFormat('MMM dd, yyyy').format(_endDate), onTap: () => _pickDate(context, false)),
               const SizedBox(height: 12),
               Text('Format', style: CupertinoTheme.of(context).textTheme.textStyle),
               const SizedBox(height: 8),
               CupertinoSlidingSegmentedControl<String>(
                 groupValue: _format,
-                children: const {
-                  'csv': Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('CSV')),
-                  'json': Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('JSON')),
-                },
-                onValueChanged: (value) {
-                  if (value != null) {
-                    setState(() => _format = value);
-                  }
-                },
+                children: const {'csv': Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('CSV')), 'json': Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('JSON'))},
+                onValueChanged: (value) => value != null ? setState(() => _format = value) : null,
               ),
               const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(
-                    child: CupertinoButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
+                  Expanded(child: CupertinoButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))),
                   const SizedBox(width: 8),
                   Expanded(
                     child: CupertinoButton.filled(
@@ -251,12 +572,12 @@ class _ExportDialogState extends State<ExportDialog> {
                         if (_startDate.isAfter(_endDate)) {
                           showCupertinoDialog(
                             context: context,
-                            builder: (context) => CupertinoAlertDialog(
+                            builder: (_) => CupertinoAlertDialog(
                               title: const Text('Invalid range'),
                               content: const Text('Start date must be before end date.'),
                               actions: [
                                 CupertinoDialogAction(
-                                  onPressed: () => Navigator.pop(context),
+                                  onPressed: () => Navigator.of(context).pop(),
                                   child: const Text('OK'),
                                 ),
                               ],
@@ -279,7 +600,6 @@ class _ExportDialogState extends State<ExportDialog> {
     );
   }
 
-  // Helper for date picker
   Future<void> _pickDate(BuildContext context, bool isStart) async {
     final initial = isStart ? _startDate : _endDate;
     DateTime temp = initial;
@@ -295,14 +615,8 @@ class _ExportDialogState extends State<ExportDialog> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CupertinoButton(
-                    onPressed: () => Navigator.pop(popupContext),
-                    child: const Text('Cancel'),
-                  ),
-                  CupertinoButton(
-                    onPressed: () => Navigator.pop(popupContext, temp),
-                    child: const Text('Done'),
-                  ),
+                  CupertinoButton(onPressed: () => Navigator.pop(popupContext), child: const Text('Cancel')),
+                  CupertinoButton(onPressed: () => Navigator.pop(popupContext, temp), child: const Text('Done')),
                 ],
               ),
             ),
@@ -319,15 +633,7 @@ class _ExportDialogState extends State<ExportDialog> {
         ),
       ),
     );
-    if (picked != null) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-        } else {
-          _endDate = picked;
-        }
-      });
-    }
+    if (picked != null) setState(() => isStart ? _startDate = picked : _endDate = picked);
   }
 }
 
@@ -335,12 +641,7 @@ class _PickerRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-
-  const _PickerRow({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+  const _PickerRow({required this.title, required this.subtitle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -358,168 +659,12 @@ class _PickerRow extends StatelessWidget {
                 children: [
                   Text(title, style: textTheme.textStyle),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: textTheme.textStyle.copyWith(color: CupertinoColors.secondaryLabel),
-                  ),
+                  Text(subtitle, style: textTheme.textStyle.copyWith(color: CupertinoColors.secondaryLabel)),
                 ],
               ),
             ),
             const Icon(CupertinoIcons.calendar),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProgressBody extends StatelessWidget {
-  final AttemptController controller;
-
-  const _ProgressBody({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    final attempts = controller.attempts;
-    final textTheme = CupertinoTheme.of(context).textTheme;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _InfoCard(
-                  title: 'Total Attempts',
-                  value: '${controller.totalAttempts}',
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _InfoCard(
-                  title: 'Average Score',
-                  value: '${controller.averageScore.toStringAsFixed(1)}%',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text('Recent Scores', style: textTheme.navTitleTextStyle.copyWith(fontSize: 20)),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 200,
-            child: RecentScoresChart(attempts: attempts),
-          ),
-          const SizedBox(height: 24),
-          Text('Recent Attempts', style: textTheme.navTitleTextStyle.copyWith(fontSize: 20)),
-          const SizedBox(height: 8),
-          ...attempts.take(5).map((attempt) => _AttemptTile(attempt: attempt)),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final String value;
-
-  const _InfoCard({required this.title, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = CupertinoTheme.of(context).textTheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: CupertinoColors.systemGrey4,
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text(title, style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(value, style: textTheme.navTitleTextStyle.copyWith(color: CupertinoColors.activeBlue)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AttemptTile extends StatelessWidget {
-  final Attempt attempt;
-
-  const _AttemptTile({required this.attempt});
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = CupertinoTheme.of(context).textTheme;
-    final badgeColor =
-        attempt.score >= 80 ? CupertinoColors.activeGreen : CupertinoColors.systemOrange;
-    final timestamp =
-        '${attempt.createdAt.month}/${attempt.createdAt.day} ${attempt.createdAt.hour}:${attempt.createdAt.minute.toString().padLeft(2, '0')}';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: CupertinoColors.systemBackground,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: CupertinoColors.systemGrey4,
-              blurRadius: 8,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: badgeColor,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '${attempt.score}%',
-                  style: textTheme.textStyle.copyWith(color: CupertinoColors.white, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      attempt.wordText.toUpperCase(),
-                      style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      attempt.feedback,
-                      style: textTheme.textStyle.copyWith(color: CupertinoColors.secondaryLabel),
-                    ),
-                  ],
-                ),
-              ),
-              Text(timestamp, style: textTheme.textStyle.copyWith(fontSize: 12)),
-            ],
-          ),
         ),
       ),
     );
