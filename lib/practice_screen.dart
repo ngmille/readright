@@ -142,6 +142,10 @@ class _PracticeScreenState extends State<PracticeScreen> {
         _speechReady = false;
         _errorMessage = 'Microphone and speech permissions are required.';
       });
+      _showPermissionDialog(
+        permanentlyDenied:
+            micStatus.isPermanentlyDenied || speechStatus.isPermanentlyDenied,
+      );
       return;
     }
 
@@ -231,6 +235,17 @@ class _PracticeScreenState extends State<PracticeScreen> {
       return;
     }
 
+    if (_micPermission?.isGranted != true || _speechPermission?.isGranted != true) {
+      await _initSpeech(force: true);
+      if (_micPermission?.isGranted != true || _speechPermission?.isGranted != true) {
+        _showPermissionDialog(
+          permanentlyDenied: _micPermission?.isPermanentlyDenied == true ||
+              _speechPermission?.isPermanentlyDenied == true,
+        );
+        return;
+      }
+    }
+
     if (!_speechReady) {
       await _initSpeech(force: true);
       if (!_speechReady) {
@@ -308,6 +323,35 @@ class _PracticeScreenState extends State<PracticeScreen> {
         )
         .then((_) => _speech.isListening)
         .catchError((_) => false);
+  }
+
+  void _showPermissionDialog({required bool permanentlyDenied}) {
+    if (!mounted) return;
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Microphone disabled'),
+        content: Text(
+          permanentlyDenied
+              ? 'Please enable the microphone and speech permissions from Settings to keep practicing.'
+              : 'We need microphone access to listen while you read. Please allow it to continue.',
+        ),
+        actions: [
+          if (permanentlyDenied)
+            CupertinoDialogAction(
+              onPressed: () {
+                openAppSettings();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Open Settings'),
+            ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _startRecorder() async {
