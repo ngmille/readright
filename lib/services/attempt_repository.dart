@@ -17,6 +17,13 @@ abstract class AttemptRepository {
     required Attempt attempt,
     String? audioFilePath,
   });
+
+  Future<void> updateAttempt({
+    required String userId,
+    required String attemptId,
+    required int score,
+    String? feedback,
+  });
 }
 
 class MockAttemptRepository implements AttemptRepository {
@@ -45,6 +52,25 @@ class MockAttemptRepository implements AttemptRepository {
     final userAttempts = _attempts.putIfAbsent(userId, () => []);
     userAttempts.insert(0, enrichedAttempt);
     return enrichedAttempt;
+  }
+
+  @override
+  Future<void> updateAttempt({
+    required String userId,
+    required String attemptId,
+    required int score,
+    String? feedback,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final userAttempts = _attempts[userId];
+    if (userAttempts == null) return;
+    final index = userAttempts.indexWhere((attempt) => attempt.id == attemptId);
+    if (index == -1) return;
+    final current = userAttempts[index];
+    userAttempts[index] = current.copyWith(
+      score: score,
+      feedback: feedback ?? current.feedback,
+    );
   }
 }
 
@@ -90,6 +116,22 @@ class FirestoreAttemptRepository implements AttemptRepository {
     }
     await _attemptCollection(userId).doc(enrichedAttempt.id).set(enrichedAttempt.toMap());
     return enrichedAttempt;
+  }
+
+  @override
+  Future<void> updateAttempt({
+    required String userId,
+    required String attemptId,
+    required int score,
+    String? feedback,
+  }) async {
+    final updateData = <String, dynamic>{
+      'score': score,
+    };
+    if (feedback != null) {
+      updateData['feedback'] = feedback;
+    }
+    await _attemptCollection(userId).doc(attemptId).update(updateData);
   }
 
   Future<String?> _uploadRecording(
@@ -218,6 +260,46 @@ class AttemptController extends ChangeNotifier {
     } finally {
       _saving = false;
       notifyListeners();
+    }
+  }
+
+  Future<bool> overrideAttemptScore({
+    required String attemptId,
+    required int score,
+    String? feedback,
+  }) async {
+    final targetUserId =
+        _authUserRole == UserRole.teacher ? _activeStudentId : _authUserId;
+    if (targetUserId == null) {
+      _error = 'No student selected';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      await _repository.updateAttempt(
+        userId: targetUserId,
+        attemptId: attemptId,
+        score: score,
+        feedback: feedback,
+      );
+      _attempts = _attempts
+          .map(
+            (attempt) => attempt.id == attemptId
+                ? attempt.copyWith(
+                    score: score,
+                    feedback: feedback ?? attempt.feedback,
+                  )
+                : attempt,
+          )
+          .toList();
+      _error = null;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      _error = 'Unable to update attempt';
+      notifyListeners();
+      return false;
     }
   }
 

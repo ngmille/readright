@@ -117,7 +117,15 @@ class _TeacherProgressView extends StatelessWidget {
               ? const Center(child: CupertinoActivityIndicator())
               : attemptController.attempts.isEmpty
                   ? _TeacherStudentEmptyState(student: selectedStudent)
-                  : _ProgressBody(controller: attemptController),
+                  : _ProgressBody(
+                      controller: attemptController,
+                      enableOverrides: true,
+                      onOverride: (attempt) => _showOverrideDialog(
+                        context,
+                        attemptController,
+                        attempt,
+                      ),
+                    ),
         ),
       ],
     );
@@ -379,8 +387,14 @@ class _ClassroomManagerPage extends StatelessWidget {
 
 class _ProgressBody extends StatelessWidget {
   final AttemptController controller;
+  final bool enableOverrides;
+  final ValueChanged<Attempt>? onOverride;
 
-  const _ProgressBody({required this.controller});
+  const _ProgressBody({
+    required this.controller,
+    this.enableOverrides = false,
+    this.onOverride,
+  });
 
   Widget _buildAnalyticsTab(List<Attempt> attempts, BuildContext context) {
     final isTeacher = context.read<AuthController>().currentUser?.role == UserRole.teacher;
@@ -638,7 +652,13 @@ class _ProgressBody extends StatelessWidget {
           // Recent attempts list
           Text('Recent Attempts', style: textTheme.navTitleTextStyle.copyWith(fontSize: 20)),
           const SizedBox(height: 8),
-          ...attempts.take(5).map((attempt) => _AttemptTile(attempt: attempt)),
+          ...attempts.take(5).map(
+                (attempt) => _AttemptTile(
+                  attempt: attempt,
+                  canOverride: enableOverrides && onOverride != null,
+                  onOverride: onOverride,
+                ),
+              ),
 
           const SizedBox(height: 32),
 
@@ -731,7 +751,13 @@ class _InfoCard extends StatelessWidget {
 
 class _AttemptTile extends StatefulWidget {
   final Attempt attempt;
-  const _AttemptTile({required this.attempt});
+  final bool canOverride;
+  final ValueChanged<Attempt>? onOverride;
+  const _AttemptTile({
+    required this.attempt,
+    this.canOverride = false,
+    this.onOverride,
+  });
 
   @override
   State<_AttemptTile> createState() => _AttemptTileState();
@@ -769,6 +795,12 @@ class _AttemptTileState extends State<_AttemptTile> {
     }
   }
 
+  void _handleOverride() {
+    final callback = widget.onOverride;
+    if (callback == null) return;
+    callback(widget.attempt);
+  }
+
   @override
   Widget build(BuildContext context) {
     final attempt = widget.attempt;
@@ -778,6 +810,7 @@ class _AttemptTileState extends State<_AttemptTile> {
         '${attempt.createdAt.month}/${attempt.createdAt.day} ${attempt.createdAt.hour}:${attempt.createdAt.minute.toString().padLeft(2, '0')}';
     final hasAudio = attempt.audioUrl != null && attempt.audioUrl!.isNotEmpty;
     final isPlaying = _playerState == PlayerState.playing;
+    final showOverride = widget.canOverride && widget.onOverride != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -812,15 +845,31 @@ class _AttemptTileState extends State<_AttemptTile> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(timestamp, style: textTheme.textStyle.copyWith(fontSize: 12)),
-                  if (hasAudio)
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _togglePlayback,
-                      child: Icon(
-                        isPlaying ? CupertinoIcons.stop_circle : CupertinoIcons.play_circle,
-                        color: CupertinoColors.activeBlue,
-                        size: 28,
-                      ),
+                  if (hasAudio || showOverride)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (hasAudio)
+                          CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: _togglePlayback,
+                            child: Icon(
+                              isPlaying ? CupertinoIcons.stop_circle : CupertinoIcons.play_circle,
+                              color: CupertinoColors.activeBlue,
+                              size: 28,
+                            ),
+                          ),
+                        if (showOverride)
+                          CupertinoButton(
+                            padding: const EdgeInsets.only(left: 4),
+                            onPressed: _handleOverride,
+                            child: const Icon(
+                              CupertinoIcons.pencil_circle,
+                              color: CupertinoColors.activeBlue,
+                              size: 28,
+                            ),
+                          ),
+                      ],
                     ),
                 ],
               ),
@@ -1046,4 +1095,96 @@ class _PickerRow extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _showOverrideDialog(
+  BuildContext context,
+  AttemptController controller,
+  Attempt attempt,
+) async {
+  final scoreController = TextEditingController(text: attempt.score.toString());
+  final feedbackController = TextEditingController(text: attempt.feedback);
+  String? localError;
+  bool saving = false;
+
+  await showCupertinoDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return CupertinoAlertDialog(
+            title: const Text('Override score'),
+            content: Column(
+              children: [
+                const SizedBox(height: 8),
+                CupertinoTextField(
+                  controller: scoreController,
+                  keyboardType: TextInputType.number,
+                  placeholder: 'Score (0-100)',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                CupertinoTextField(
+                  controller: feedbackController,
+                  placeholder: 'Feedback (optional)',
+                  maxLines: 3,
+                ),
+                if (localError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    localError!,
+                    style: const TextStyle(
+                      color: CupertinoColors.destructiveRed,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+                if (saving) ...[
+                  const SizedBox(height: 8),
+                  const CupertinoActivityIndicator(),
+                ],
+              ],
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              CupertinoDialogAction(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final parsed = int.tryParse(scoreController.text.trim());
+                        if (parsed == null || parsed < 0 || parsed > 100) {
+                          setState(() => localError = 'Score must be between 0 and 100.');
+                          return;
+                        }
+                        setState(() {
+                          localError = null;
+                          saving = true;
+                        });
+                        final updated = await controller.overrideAttemptScore(
+                          attemptId: attempt.id,
+                          score: parsed,
+                          feedback: feedbackController.text.trim().isEmpty
+                              ? attempt.feedback
+                              : feedbackController.text.trim(),
+                        );
+                        if (updated && dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        } else {
+                          setState(() {
+                            saving = false;
+                            localError = 'Unable to update score.';
+                          });
+                        }
+                      },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
