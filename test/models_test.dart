@@ -15,7 +15,7 @@ void main() {
         transcript: 'kat',
         accuracy: 0.85,
         duration: const Duration(seconds: 3),
-        audioPath: '/tmp/audio.wav',
+        audioUrl: 'https://example.com/audio.wav',
       );
 
       expect(attempt.id, 'test1');
@@ -26,7 +26,7 @@ void main() {
       expect(attempt.transcript, 'kat');
       expect(attempt.accuracy, 0.85);
       expect(attempt.duration, const Duration(seconds: 3));
-      expect(attempt.audioPath, '/tmp/audio.wav');
+      expect(attempt.audioUrl, 'https://example.com/audio.wav');
     });
 
     test('Attempt optional fields are nullable', () {
@@ -41,7 +41,7 @@ void main() {
       expect(attempt.transcript, null);
       expect(attempt.accuracy, null);
       expect(attempt.duration, null);
-      expect(attempt.audioPath, null);
+      expect(attempt.audioUrl, null);
     });
 
     test('Attempt equality works for identical instances', () {

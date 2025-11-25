@@ -11,30 +11,57 @@ import 'package:flutter/material.dart';
 import '../models/attempt_model.dart';
 import '../services/attempt_repository.dart';
 import '../services/auth_service.dart';
+import '../services/classroom_repository.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class ProgressScreen extends StatelessWidget {
   const ProgressScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AttemptController>(
-      builder: (context, controller, _) => CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(
-          middle: const Text('Progress'),
-          trailing: CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: controller.isLoading ? null : () => _showExportDialog(context, controller),
-            child: const Icon(CupertinoIcons.share),
+    return Consumer3<AuthController, AttemptController, ClassroomController>(
+      builder: (context, auth, controller, classroom, _) {
+        final isTeacher = auth.currentUser?.role == UserRole.teacher;
+
+        if (isTeacher == true) {
+          final selectedStudent = classroom.selectedStudent;
+          if (selectedStudent != null &&
+              controller.activeStudentId != selectedStudent.id &&
+              !controller.isLoading) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              context
+                  .read<AttemptController>()
+                  .loadAttemptsForStudent(selectedStudent.id);
+            });
+          }
+        }
+
+        final canShare = controller.attempts.isNotEmpty && !controller.isLoading;
+
+        return CupertinoPageScaffold(
+          navigationBar: CupertinoNavigationBar(
+            middle: const Text('Progress'),
+            trailing: CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed:
+                  canShare ? () => _showExportDialog(context, controller) : null,
+              child: const Icon(CupertinoIcons.share),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: controller.isLoading
-              ? const Center(child: CupertinoActivityIndicator())
-              : controller.attempts.isEmpty
-                  ? _buildEmptyState(context)
-                  : _ProgressBody(controller: controller),
-        ),
-      ),
+          child: SafeArea(
+            child: isTeacher == true
+                ? _TeacherProgressView(
+                    attemptController: controller,
+                    classroomController: classroom,
+                  )
+                : controller.isLoading
+                    ? const Center(child: CupertinoActivityIndicator())
+                    : controller.attempts.isEmpty
+                        ? _buildEmptyState(context)
+                        : _ProgressBody(controller: controller),
+          ),
+        );
+      },
     );
   }
 
@@ -51,6 +78,301 @@ class ProgressScreen extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ),
+    );
+  }
+}
+
+class _TeacherProgressView extends StatelessWidget {
+  final AttemptController attemptController;
+  final ClassroomController classroomController;
+
+  const _TeacherProgressView({
+    required this.attemptController,
+    required this.classroomController,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (classroomController.isLoading) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+
+    if (classroomController.assignedStudents.isEmpty) {
+      return _TeacherClassroomEmptyState(controller: classroomController);
+    }
+
+    final selectedStudent = classroomController.selectedStudent;
+    if (selectedStudent == null) {
+      return _TeacherClassroomEmptyState(controller: classroomController);
+    }
+
+    return Column(
+      children: [
+        _TeacherStudentSelector(
+          classroomController: classroomController,
+          attemptController: attemptController,
+        ),
+        Expanded(
+          child: attemptController.isLoading
+              ? const Center(child: CupertinoActivityIndicator())
+              : attemptController.attempts.isEmpty
+                  ? _TeacherStudentEmptyState(student: selectedStudent)
+                  : _ProgressBody(controller: attemptController),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeacherClassroomEmptyState extends StatelessWidget {
+  final ClassroomController controller;
+
+  const _TeacherClassroomEmptyState({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'No students yet',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Add students to your classroom to track their progress.',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(color: CupertinoColors.secondaryLabel),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          CupertinoButton.filled(
+            onPressed: () => _showManageClassroom(context, controller),
+            child: const Text('Manage classroom'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeacherStudentEmptyState extends StatelessWidget {
+  final ClassroomStudent student;
+
+  const _TeacherStudentEmptyState({required this.student});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          '${student.displayName} has not completed any practice sessions yet.',
+          style: CupertinoTheme.of(context)
+              .textTheme
+              .textStyle
+              .copyWith(color: CupertinoColors.secondaryLabel),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherStudentSelector extends StatelessWidget {
+  final ClassroomController classroomController;
+  final AttemptController attemptController;
+
+  const _TeacherStudentSelector({
+    required this.classroomController,
+    required this.attemptController,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedName =
+        classroomController.selectedStudent?.displayName ?? 'Select student';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  color: CupertinoColors.systemGrey5,
+                  onPressed: classroomController.assignedStudents.isEmpty
+                      ? null
+                      : () => _showStudentPicker(
+                            context,
+                            classroomController,
+                            attemptController,
+                          ),
+                  child: Text(
+                    selectedName,
+                    style: const TextStyle(color: CupertinoColors.black),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                onPressed: () =>
+                    _showManageClassroom(context, classroomController),
+                child: const Text('Manage'),
+              ),
+            ],
+          ),
+          if (classroomController.isUpdating)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: CupertinoActivityIndicator(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _showStudentPicker(
+  BuildContext context,
+  ClassroomController classroom,
+  AttemptController attempts,
+) async {
+  final students = classroom.assignedStudents;
+  if (students.isEmpty) return;
+
+  await showCupertinoModalPopup<void>(
+    context: context,
+    builder: (context) => CupertinoActionSheet(
+      title: const Text('Select a student'),
+      actions: [
+        for (final student in students)
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              classroom.selectStudent(student);
+              attempts.loadAttemptsForStudent(student.id);
+            },
+            isDefaultAction:
+                student.id == classroom.selectedStudent?.id,
+            child: Text(student.displayName),
+          ),
+      ],
+      cancelButton: CupertinoActionSheetAction(
+        isDefaultAction: false,
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+    ),
+  );
+}
+
+Future<void> _showManageClassroom(
+  BuildContext context,
+  ClassroomController controller,
+) async {
+  final navigator = Navigator.of(context);
+  await controller.refreshAvailableStudents();
+  await navigator.push(
+    CupertinoPageRoute<void>(
+      builder: (_) => const _ClassroomManagerPage(),
+    ),
+  );
+}
+
+class _ClassroomManagerPage extends StatelessWidget {
+  const _ClassroomManagerPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ClassroomController>(
+      builder: (context, controller, _) {
+        final assignedIds =
+            controller.assignedStudents.map((s) => s.id).toSet();
+        return CupertinoPageScaffold(
+          navigationBar: const CupertinoNavigationBar(
+            middle: Text('Manage classroom'),
+          ),
+          child: SafeArea(
+            child: controller.allStudents.isEmpty && controller.isLoading
+                ? const Center(child: CupertinoActivityIndicator())
+                : controller.allStudents.isEmpty
+                    ? const Center(
+                        child: Text('No student accounts available yet.'),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: controller.allStudents.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final student = controller.allStudents[index];
+                          final isAssigned = assignedIds.contains(student.id);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.systemBackground,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: CupertinoColors.systemGrey4,
+                                  blurRadius: 6,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        student.displayName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        student.email,
+                                        style: const TextStyle(
+                                          color:
+                                              CupertinoColors.secondaryLabel,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                CupertinoSwitch(
+                                  value: isAssigned,
+                                  onChanged: (value) => controller.toggleStudent(
+                                    student,
+                                    value,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -407,16 +729,55 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-class _AttemptTile extends StatelessWidget {
+class _AttemptTile extends StatefulWidget {
   final Attempt attempt;
   const _AttemptTile({required this.attempt});
 
   @override
+  State<_AttemptTile> createState() => _AttemptTileState();
+}
+
+class _AttemptTileState extends State<_AttemptTile> {
+  final AudioPlayer _player = AudioPlayer();
+  PlayerState _playerState = PlayerState.stopped;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() => _playerState = state);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlayback() async {
+    final url = widget.attempt.audioUrl;
+    if (url == null) return;
+    if (_playerState == PlayerState.playing) {
+      await _player.stop();
+    } else {
+      await _player.stop();
+      await _player.setSourceUrl(url);
+      await _player.resume();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final attempt = widget.attempt;
     final textTheme = CupertinoTheme.of(context).textTheme;
     final badgeColor = attempt.score >= 80 ? CupertinoColors.activeGreen : CupertinoColors.systemOrange;
     final timestamp =
         '${attempt.createdAt.month}/${attempt.createdAt.day} ${attempt.createdAt.hour}:${attempt.createdAt.minute.toString().padLeft(2, '0')}';
+    final hasAudio = attempt.audioUrl != null && attempt.audioUrl!.isNotEmpty;
+    final isPlaying = _playerState == PlayerState.playing;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -447,7 +808,22 @@ class _AttemptTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(timestamp, style: textTheme.textStyle.copyWith(fontSize: 12)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(timestamp, style: textTheme.textStyle.copyWith(fontSize: 12)),
+                  if (hasAudio)
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: _togglePlayback,
+                      child: Icon(
+                        isPlaying ? CupertinoIcons.stop_circle : CupertinoIcons.play_circle,
+                        color: CupertinoColors.activeBlue,
+                        size: 28,
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -497,6 +873,7 @@ void _exportAttempts(BuildContext context, List<Attempt> allAttempts, DateTime s
         'transcript': a.transcript ?? '',
         'accuracy': a.accuracy?.toStringAsFixed(2) ?? '',
         'createdAt': DateFormat('yyyy-MM-dd HH:mm:ss').format(a.createdAt),
+        'audioUrl': a.audioUrl ?? '',
       }).toList();
 
   final directory = Directory.systemTemp;

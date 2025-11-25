@@ -15,7 +15,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _isSignUpMode = false;
   UserRole? _selectedRole;
+  String? _roleError;
 
   @override
   void dispose() {
@@ -121,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         return CupertinoPageScaffold(
           navigationBar: const CupertinoNavigationBar(
-            middle: Text('Sign in'),
+            middle: Text('Account'),
           ),
           child: SafeArea(
             child: Center(
@@ -147,8 +149,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _buildModeToggle(),
+                          const SizedBox(height: 16),
                           Text(
-                            'Who are you?',
+                            _isSignUpMode
+                                ? 'Create your ReadRight account'
+                                : 'Welcome back! Sign in to continue',
                             style: CupertinoTheme.of(context)
                                 .textTheme
                                 .textStyle
@@ -156,9 +162,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // 🔹 Cartoon role selector replaces segmented control
-                          _buildRoleSelector(),
-                          const SizedBox(height: 24),
+                          if (_isSignUpMode) ...[
+                            // 🔹 Cartoon role selector replaces segmented control
+                            _buildRoleSelector(),
+                            const SizedBox(height: 24),
+                          ],
 
                           CupertinoFormSection.insetGrouped(
                             backgroundColor: CupertinoColors.systemBackground,
@@ -204,24 +212,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: CupertinoButton.filled(
-                              onPressed: auth.isSubmitting ? null : _submitForm,
+                              onPressed: auth.isSubmitting ? null : _handleSubmit,
                               child: auth.isSubmitting
                                   ? const CupertinoActivityIndicator()
-                                  : const Text('Sign in'),
+                                  : Text(_isSignUpMode ? 'Sign up' : 'Sign in'),
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Text(
-                            'Demo accounts:\n'
-                            '• student@readright.app / student123\n'
-                            '• teacher@readright.app / teacher123',
-                            style: CupertinoTheme.of(context)
-                                .textTheme
-                                .textStyle
-                                .copyWith(
-                                  color: CupertinoColors.secondaryLabel,
-                                ),
-                          ),
+                          _buildDemoAccountButtons(),
                         ],
                       ),
                     ),
@@ -235,17 +233,35 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _submitForm() async {
+  Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
+    if (_isSignUpMode && _selectedRole == null) {
+      setState(() => _roleError = 'Select a role to continue');
+      return;
+    } else if (_roleError != null) {
+      setState(() => _roleError = null);
+    }
+
     FocusScope.of(context).unfocus();
     final auth = context.read<AuthController>();
-    final success = await auth.signIn(
-      email: _emailController.text,
-      password: _passwordController.text,
-    );
+    bool success;
+
+    if (_isSignUpMode) {
+      success = await auth.register(
+        email: _emailController.text,
+        password: _passwordController.text,
+        role: _selectedRole!,
+        displayName: _deriveDisplayName(_emailController.text),
+      );
+    } else {
+      success = await auth.signIn(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+    }
 
     if (!mounted) return;
 
@@ -253,8 +269,10 @@ class _LoginScreenState extends State<LoginScreen> {
       showCupertinoDialog(
         context: context,
         builder: (context) => CupertinoAlertDialog(
-          title: const Text('Unable to sign in'),
-          content: const Text('Please check your credentials and try again.'),
+          title: Text(_isSignUpMode ? 'Unable to sign up' : 'Unable to sign in'),
+          content: Text(_isSignUpMode
+              ? 'Please double-check your details and try again.'
+              : 'Please check your credentials and try again.'),
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(context),
@@ -266,9 +284,17 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _applyMockCredentials(UserRole role) {
+  void _selectRole(UserRole role) {
     setState(() {
       _selectedRole = role;
+      _roleError = null;
+    });
+
+    context.read<AuthController>().clearError();
+  }
+
+  void _fillDemoCredentials(UserRole role) {
+    setState(() {
       switch (role) {
         case UserRole.student:
           _emailController.text = 'student@readright.app';
@@ -279,34 +305,128 @@ class _LoginScreenState extends State<LoginScreen> {
           _passwordController.text = 'teacher123';
           break;
       }
+      _isSignUpMode = false;
+      _roleError = null;
     });
-
     context.read<AuthController>().clearError();
+  }
+
+  Widget _buildModeToggle() {
+    return CupertinoSlidingSegmentedControl<bool>(
+      groupValue: _isSignUpMode,
+      children: const {
+        false: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text('Sign in'),
+        ),
+        true: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text('Sign up'),
+        ),
+      },
+      onValueChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          _isSignUpMode = value;
+          _roleError = null;
+        });
+        context.read<AuthController>().clearError();
+      },
+    );
   }
 
   /// Cartoon role selector using monkey icons
   Widget _buildRoleSelector() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Column(
       children: [
-        _RoleButton(
-          label: "I'm a Student",
-          imagePath: 'assets/icons/Studentmonkey.png',
-          selected: _selectedRole == UserRole.student,
-          onTap: () {
-            _applyMockCredentials(UserRole.student);
-          },
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _RoleButton(
+              label: "I'm a Student",
+              imagePath: 'assets/icons/Studentmonkey.png',
+              selected: _selectedRole == UserRole.student,
+              onTap: () {
+                _selectRole(UserRole.student);
+              },
+            ),
+            _RoleButton(
+              label: "I'm a Teacher",
+              imagePath: 'assets/icons/Teachermonkey.png',
+              selected: _selectedRole == UserRole.teacher,
+              onTap: () {
+                _selectRole(UserRole.teacher);
+              },
+            ),
+          ],
         ),
-        _RoleButton(
-          label: "I'm a Teacher",
-          imagePath: 'assets/icons/Teachermonkey.png',
-          selected: _selectedRole == UserRole.teacher,
-          onTap: () {
-            _applyMockCredentials(UserRole.teacher);
-          },
+        if (_isSignUpMode && _roleError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _roleError!,
+              style: const TextStyle(color: CupertinoColors.destructiveRed),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDemoAccountButtons() {
+    final textStyle = CupertinoTheme.of(context)
+        .textTheme
+        .textStyle
+        .copyWith(color: CupertinoColors.secondaryLabel);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Demo accounts:',
+          style: textStyle,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: CupertinoButton(
+                color: CupertinoColors.systemGrey5,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed: () => _fillDemoCredentials(UserRole.student),
+                child: const Text(
+                  'Student demo',
+                  style: TextStyle(color: CupertinoColors.black),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: CupertinoButton(
+                color: CupertinoColors.systemGrey5,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed: () => _fillDemoCredentials(UserRole.teacher),
+                child: const Text(
+                  'Teacher demo',
+                  style: TextStyle(color: CupertinoColors.black),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Tap a button to auto-fill the demo email & password.',
+          style: textStyle,
         ),
       ],
     );
+  }
+
+  String _deriveDisplayName(String email) {
+    final value = email.trim();
+    if (value.isEmpty) return 'Reader';
+    final namePart = value.split('@').first;
+    if (namePart.isEmpty) return value;
+    return namePart[0].toUpperCase() + namePart.substring(1);
   }
 }
 

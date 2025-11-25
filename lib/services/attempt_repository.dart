@@ -1,96 +1,134 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/attempt_model.dart';
+import 'auth_service.dart';
 
 abstract class AttemptRepository {
-  Future<List<Attempt>> fetchAttempts();
+  Future<List<Attempt>> fetchAttempts({required String userId});
 
-  Future<void> saveAttempt(Attempt attempt);
+  Future<Attempt> saveAttempt({
+    required String userId,
+    required Attempt attempt,
+    String? audioFilePath,
+  });
 }
 
 class MockAttemptRepository implements AttemptRepository {
-  final List<Attempt> _attempts;
+  final Map<String, List<Attempt>> _attempts;
 
-  MockAttemptRepository({List<Attempt>? seed}) : _attempts = List.from(seed ?? _sampleData);
-
-  static final _sampleData = List<Attempt>.unmodifiable([
-    Attempt(
-      id: 'a1',
-      wordText: 'the',
-      score: 95,
-      feedback: 'Strong pronunciation',
-      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 3)),
-      transcript: 'the',
-      accuracy: 0.95,
-      duration: const Duration(seconds: 2),
-    ),
-    Attempt(
-      id: 'a2',
-      wordText: 'cat',
-      score: 82,
-      feedback: 'Watch the vowel sound',
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 4)),
-      transcript: 'kat',
-      accuracy: 0.82,
-      duration: const Duration(seconds: 3),
-    ),
-    Attempt(
-      id: 'a3',
-      wordText: 'dog',
-      score: 100,
-      feedback: 'Perfect!',
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 1)),
-      transcript: 'dog',
-      accuracy: 1.0,
-      duration: const Duration(seconds: 2),
-    ),
-    Attempt(
-      id: 'a4',
-      wordText: 'and',
-      score: 78,
-      feedback: 'Blend the ending',
-      createdAt: DateTime.now().subtract(const Duration(hours: 8)),
-      transcript: 'end',
-      accuracy: 0.78,
-      duration: const Duration(seconds: 3),
-    ),
-    Attempt(
-      id: 'a5',
-      wordText: 'bed',
-      score: 91,
-      feedback: 'Nice pacing',
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      transcript: 'bed',
-      accuracy: 0.91,
-      duration: const Duration(seconds: 2),
-    ),
-  ]);
+  MockAttemptRepository({Map<String, List<Attempt>>? seed})
+      : _attempts = seed != null
+            ? seed.map((key, value) => MapEntry(key, List.of(value)))
+            : {};
 
   @override
-  Future<List<Attempt>> fetchAttempts() async {
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    return List.unmodifiable(_attempts);
+  Future<List<Attempt>> fetchAttempts({required String userId}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    return List.unmodifiable(_attempts[userId] ?? const []);
   }
 
   @override
-  Future<void> saveAttempt(Attempt attempt) async {
+  Future<Attempt> saveAttempt({
+    required String userId,
+    required Attempt attempt,
+    String? audioFilePath,
+  }) async {
     await Future<void>.delayed(const Duration(milliseconds: 150));
-    _attempts.insert(0, attempt);
+    final enrichedAttempt =
+        audioFilePath != null ? attempt.copyWith(audioUrl: audioFilePath) : attempt;
+    final userAttempts = _attempts.putIfAbsent(userId, () => []);
+    userAttempts.insert(0, enrichedAttempt);
+    return enrichedAttempt;
+  }
+}
+
+class FirestoreAttemptRepository implements AttemptRepository {
+  final FirebaseFirestore _firestore;
+  final FirebaseStorage? _storage;
+
+  FirestoreAttemptRepository({
+    FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _storage = storage ?? FirebaseStorage.instance;
+
+  CollectionReference<Map<String, dynamic>> _attemptCollection(String userId) {
+    return _firestore.collection('users').doc(userId).collection('attempts');
+  }
+
+  @override
+  Future<List<Attempt>> fetchAttempts({required String userId}) async {
+    final snapshot = await _attemptCollection(userId)
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => Attempt.fromMap(doc.id, doc.data()))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<Attempt> saveAttempt({
+    required String userId,
+    required Attempt attempt,
+    String? audioFilePath,
+  }) async {
+    var enrichedAttempt = attempt;
+    if (audioFilePath != null) {
+      final audioUrl = await _uploadRecording(userId, attempt.id, audioFilePath);
+      if (audioUrl == null) {
+        throw Exception('Recording upload failed');
+      }
+      enrichedAttempt = attempt.copyWith(audioUrl: audioUrl);
+    }
+    await _attemptCollection(userId).doc(enrichedAttempt.id).set(enrichedAttempt.toMap());
+    return enrichedAttempt;
+  }
+
+  Future<String?> _uploadRecording(
+    String userId,
+    String attemptId,
+    String localPath,
+  ) async {
+    final storage = _storage;
+    if (storage == null) return null;
+    final file = File(localPath);
+    if (!await file.exists()) return null;
+
+    final ref = storage.ref('users/$userId/attempts/$attemptId.m4a');
+    try {
+      await ref.putFile(
+        file,
+        SettableMetadata(contentType: 'audio/m4a'),
+      );
+      return await ref.getDownloadURL();
+    } finally {
+      unawaited(file.delete().catchError((_) => file));
+    }
   }
 }
 
 class AttemptController extends ChangeNotifier {
   final AttemptRepository _repository;
   List<Attempt> _attempts = const [];
-  bool _loading = true;
+  bool _loading = false;
   bool _saving = false;
   String? _error;
 
+  String? _authUserId;
+  UserRole? _authUserRole;
+  String? _activeStudentId;
+
   AttemptController({required AttemptRepository repository}) : _repository = repository;
 
-  List<Attempt> get attempts => List.unmodifiable([..._attempts]);
+  List<Attempt> get attempts => List.unmodifiable(_attempts);
   bool get isLoading => _loading;
   bool get isSaving => _saving;
   String? get errorMessage => _error;
@@ -101,18 +139,36 @@ class AttemptController extends ChangeNotifier {
     return sum / _attempts.length;
   }
 
-  Future<void> initialize() async {
-    _loading = true;
-    notifyListeners();
-    try {
-      _attempts = await _repository.fetchAttempts();
-      _error = null;
-    } catch (error) {
-      _error = 'Unable to load attempts';
-    } finally {
-      _loading = false;
+  String? get activeStudentId => _activeStudentId;
+  UserRole? get currentRole => _authUserRole;
+
+  void updateAuthenticatedUser(AuthUser? user) {
+    _authUserId = user?.id;
+    _authUserRole = user?.role;
+    _error = null;
+
+    if (user == null) {
+      _activeStudentId = null;
+      _attempts = const [];
+      notifyListeners();
+      return;
+    }
+
+    if (user.role == UserRole.student) {
+      _activeStudentId = user.id;
+      _loadAttemptsFor(user.id);
+    } else {
+      _activeStudentId = null;
+      _attempts = const [];
       notifyListeners();
     }
+  }
+
+  Future<void> loadAttemptsForStudent(String studentId) async {
+    if (_authUserRole != UserRole.teacher) return;
+    if (_activeStudentId == studentId && _attempts.isNotEmpty) return;
+    _activeStudentId = studentId;
+    await _loadAttemptsFor(studentId);
   }
 
   Future<void> addAttempt({
@@ -123,8 +179,15 @@ class AttemptController extends ChangeNotifier {
     double? accuracy,
     DateTime? timestamp,
     Duration? duration,
-    String? audioPath,
+    String? audioFilePath,
   }) async {
+    final targetUserId = _authUserRole == UserRole.teacher ? _activeStudentId : _authUserId;
+    if (targetUserId == null) {
+      _error = 'No student selected';
+      notifyListeners();
+      return;
+    }
+
     final attempt = Attempt(
       id: _generateId(),
       wordText: word,
@@ -134,20 +197,40 @@ class AttemptController extends ChangeNotifier {
       transcript: transcript,
       accuracy: accuracy,
       duration: duration,
-      audioPath: audioPath,
     );
 
     _saving = true;
     notifyListeners();
 
     try {
-      await _repository.saveAttempt(attempt);
-      _attempts = [attempt, ..._attempts];
+      final savedAttempt = await _repository.saveAttempt(
+        userId: targetUserId,
+        attempt: attempt,
+        audioFilePath: audioFilePath,
+      );
+      if (_activeStudentId == targetUserId) {
+        _attempts = [savedAttempt, ..._attempts];
+      }
       _error = null;
-    } catch (_) {
+    } catch (error) {
       _error = 'Unable to save attempt';
+      rethrow;
     } finally {
       _saving = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadAttemptsFor(String userId) async {
+    _loading = true;
+    notifyListeners();
+    try {
+      _attempts = await _repository.fetchAttempts(userId: userId);
+      _error = null;
+    } catch (_) {
+      _error = 'Unable to load attempts';
+    } finally {
+      _loading = false;
       notifyListeners();
     }
   }

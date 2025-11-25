@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,25 +12,46 @@ import 'progress_screen.dart';
 // Services
 import 'services/auth_service.dart';
 import 'services/attempt_repository.dart';
+import 'services/classroom_repository.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final firebaseReady = await _ensureFirebaseInitialized();
+
   final prefs = await SharedPreferences.getInstance();
-  final authRepository = MockAuthRepository(prefs);
+  final authRepository = firebaseReady
+      ? FirebaseAuthRepository()
+      : MockAuthRepository(prefs);
   final authController = AuthController(repository: authRepository);
   await authController.initialize();
 
-  final attemptRepository = MockAttemptRepository();
-  final attemptController = AttemptController(repository: attemptRepository);
-  await attemptController.initialize();
+  final attemptRepository =
+      firebaseReady ? FirestoreAttemptRepository() : MockAttemptRepository();
+  final classroomRepository = firebaseReady ? ClassroomRepository() : null;
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthController>.value(value: authController),
-        ChangeNotifierProvider<AttemptController>.value(
-            value: attemptController),
+        ChangeNotifierProxyProvider<AuthController, AttemptController>(
+          create: (_) => AttemptController(repository: attemptRepository),
+          update: (_, auth, controller) {
+            controller ??= AttemptController(repository: attemptRepository);
+            controller.updateAuthenticatedUser(auth.currentUser);
+            return controller;
+          },
+        ),
+        ChangeNotifierProxyProvider<AuthController, ClassroomController>(
+          create: (_) => ClassroomController(repository: classroomRepository),
+          update: (_, auth, controller) {
+            controller ??=
+                ClassroomController(repository: classroomRepository);
+            controller.updateForUser(auth.currentUser);
+            return controller;
+          },
+        ),
       ],
       child: const ReadRightApp(),
     ),
@@ -50,6 +72,21 @@ class ReadRightApp extends StatelessWidget {
       ),
       home: const AppNavigator(),
     );
+  }
+}
+
+Future<bool> _ensureFirebaseInitialized() async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    return true;
+  } catch (error, stackTrace) {
+    // If Firebase cannot be initialized (e.g., missing configuration) we log the
+    // error and fall back to the mock repository so the rest of the app remains usable.
+    debugPrint('Firebase failed to initialize: $error');
+    debugPrint('$stackTrace');
+    return false;
   }
 }
 
@@ -130,28 +167,11 @@ class _AppNavigatorState extends State<AppNavigator> {
     // 2) STUDENT VIEW — simple, elementary-friendly navigation
     if (user.role == UserRole.student) {
       return [
-        // Home = Welcome screen with "Let's get started!" button.
         _NavDestination(
-          screen: const LoginScreen(),
-          item: const BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.house_fill),
-            label: 'Home',
-          ),
-        ),
-        // Direct path to practice: big word + mic button.
-        _NavDestination(
-          screen: const PracticeScreen(),
+          screen: const _StudentPracticeShell(),
           item: const BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.mic_fill),
             label: 'Practice',
-          ),
-        ),
-        // Simple progress view: stars / charts / badges.
-        _NavDestination(
-          screen: const ProgressScreen(),
-          item: const BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.star_fill),
-            label: 'Progress',
           ),
         ),
       ];
@@ -192,4 +212,137 @@ class _NavDestination {
     required this.screen,
     required this.item,
   });
+}
+
+class _StudentPracticeShell extends StatelessWidget {
+  const _StudentPracticeShell();
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('ReadRight'),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Icon(CupertinoIcons.person_crop_circle),
+          onPressed: () {
+            Navigator.of(context).push(
+              CupertinoPageRoute<void>(
+                builder: (_) => const _StudentAccountPage(),
+              ),
+            );
+          },
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 48),
+              Text(
+                'Ready to read?',
+                style: CupertinoTheme.of(context)
+                    .textTheme
+                    .textStyle
+                    .copyWith(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tap Begin and we\'ll read words together.',
+                style: CupertinoTheme.of(context)
+                    .textTheme
+                    .textStyle
+                    .copyWith(
+                      fontSize: 20,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 64),
+              SizedBox(
+                width: double.infinity,
+                child: CupertinoButton.filled(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => const PracticeScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Begin',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StudentAccountPage extends StatelessWidget {
+  const _StudentAccountPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthController>(
+      builder: (context, auth, _) {
+        final user = auth.currentUser;
+        return CupertinoPageScaffold(
+          navigationBar: const CupertinoNavigationBar(
+            middle: Text('My Account'),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user?.displayName ?? 'Reader',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(fontSize: 28, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Role: ${user?.role == UserRole.teacher ? 'Teacher' : 'Student'}',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(color: CupertinoColors.secondaryLabel),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: double.infinity,
+                    child: CupertinoButton.filled(
+                      onPressed: () async {
+                        final navigator = Navigator.of(context);
+                        await context.read<AuthController>().signOut();
+                        if (navigator.mounted) {
+                          navigator.popUntil((route) => route.isFirst);
+                        }
+                      },
+                      child: const Text('Sign out'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

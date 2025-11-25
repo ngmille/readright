@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'models/word_model.dart';
 import 'services/attempt_repository.dart';
@@ -27,6 +29,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   static const _listOrder = ['dolch', 'phonics', 'minimal_pair'];
 
   final SpeechToText _speech = SpeechToText();
+  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
 
   SharedPreferences? _prefs;
   String? _userId;
@@ -36,6 +39,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
   bool _isListening = false;
   bool _isProcessing = false;
   bool _allListsComplete = false;
+  bool _recorderReady = false;
+  bool _isRecordingAudio = false;
 
   PermissionStatus? _micPermission;
   PermissionStatus? _speechPermission;
@@ -57,6 +62,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   String? _feedbackMessage;
   String? _phonemeFeedback;
   String? _errorMessage;
+  String? _recordingFilePath;
 
   @override
   void initState() {
@@ -71,6 +77,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
     _countdownTimer?.cancel();
     _speech.stop();
     _speech.cancel();
+    _recorder.closeRecorder();
     super.dispose();
   }
 
@@ -105,6 +112,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
       _prefs = prefs;
       _loadProgress();
       await _initSpeech();
+      await _initRecorder();
       _rebuildQueue();
     } catch (error) {
       setState(() {
@@ -149,6 +157,21 @@ class _PracticeScreenState extends State<PracticeScreen> {
         _errorMessage = 'Speech recognition is not available on this device.';
       }
     });
+  }
+
+  Future<void> _initRecorder() async {
+    try {
+      await _recorder.openRecorder();
+      if (!mounted) return;
+      setState(() {
+        _recorderReady = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recorderReady = false;
+      });
+    }
   }
 
   void _loadProgress() {
@@ -219,6 +242,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
       return;
     }
 
+    _recordingFilePath = null;
+
     setState(() {
       _isListening = true;
       _remainingSeconds = _maxRecordingSeconds;
@@ -232,12 +257,21 @@ class _PracticeScreenState extends State<PracticeScreen> {
       _errorMessage = null;
     });
 
+    if (_recorderReady) {
+      try {
+        await _startRecorder();
+      } catch (_) {
+        _recordingFilePath = null;
+      }
+    }
+
     var listenSuccess = await _startSpeechSession(onDevice: true);
     if (!listenSuccess) {
       listenSuccess = await _startSpeechSession(onDevice: false);
     }
 
     if (!listenSuccess && mounted) {
+      await _stopRecorder();
       setState(() {
         _isListening = false;
         _errorMessage = 'Unable to start speech recognition.';
@@ -276,6 +310,33 @@ class _PracticeScreenState extends State<PracticeScreen> {
         .catchError((_) => false);
   }
 
+  Future<void> _startRecorder() async {
+    if (!_recorderReady) return;
+    final dir = await getTemporaryDirectory();
+    final path =
+        '${dir.path}/readright_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.startRecorder(
+      toFile: path,
+      codec: Codec.aacMP4,
+      numChannels: 1,
+      sampleRate: 16000,
+    );
+    _isRecordingAudio = true;
+    _recordingFilePath = path;
+  }
+
+  Future<String?> _stopRecorder() async {
+    if (!_recorderReady) return _recordingFilePath;
+    if (_isRecordingAudio) {
+      final path = await _recorder.stopRecorder();
+      _isRecordingAudio = false;
+      if (path != null) {
+        _recordingFilePath = path;
+      }
+    }
+    return _recordingFilePath;
+  }
+
   Future<void> _stopListening({bool auto = false}) async {
     if (!_isListening) return;
 
@@ -288,18 +349,18 @@ class _PracticeScreenState extends State<PracticeScreen> {
     });
 
     if (!_processedCurrentAttempt) {
-      _processTranscript(_lastTranscript);
+      await _processTranscript(_lastTranscript);
     }
   }
 
-  void _onSpeechResult(SpeechRecognitionResult result) {
+  Future<void> _onSpeechResult(SpeechRecognitionResult result) async {
     if (!mounted) return;
     setState(() {
       _lastTranscript = result.recognizedWords.trim();
     });
 
     if (result.finalResult && !_processedCurrentAttempt) {
-      _processTranscript(result.recognizedWords);
+      await _processTranscript(result.recognizedWords);
     }
   }
 
@@ -319,22 +380,25 @@ class _PracticeScreenState extends State<PracticeScreen> {
   }
 
   Future<void> _processTranscript(String transcript) async {
-  if (_isProcessing || _currentQueue.isEmpty) return;
+    if (_isProcessing || _currentQueue.isEmpty) return;
 
-  _processedCurrentAttempt = true;
-  _countdownTimer?.cancel();
-  final attemptController = context.read<AttemptController>();
-  if (_speech.isListening) {
+    _processedCurrentAttempt = true;
+    _countdownTimer?.cancel();
+    final attemptController = context.read<AttemptController>();
+    if (_speech.isListening) {
+      try {
+        await _speech.stop();
+      } catch (_) {} // ignore
+    }
+
+    final audioFilePath = await _stopRecorder();
+    _recordingFilePath = null;
+
+    final word = _currentQueue[_currentWordIndex];
+    final normalizedTranscript = transcript.trim().toLowerCase();
+    final duration = _listeningStartedAt != null ? DateTime.now().difference(_listeningStartedAt!) : null;
+
     try {
-      await _speech.stop();
-    } catch (_) {} // ignore
-  }
-
-  final word = _currentQueue[_currentWordIndex];
-  final normalizedTranscript = transcript.trim().toLowerCase();
-  final duration = _listeningStartedAt != null ? DateTime.now().difference(_listeningStartedAt!) : null;
-
-  try {
     final assessor = AssessorFactory.create();
     final result = await assessor.assess(
       referenceText: word.text,
@@ -357,14 +421,19 @@ class _PracticeScreenState extends State<PracticeScreen> {
       _phonemeFeedback = result.phonemeFeedback;
     });
 
-    await attemptController.addAttempt(
+    final saveSucceeded = await _saveAttempt(
+      attemptController,
       word: word.text,
       score: score,
       feedback: feedback,
       transcript: normalizedTranscript,
       accuracy: accuracy,
       duration: duration,
-    ); // extend addAttempt for phonemeFeedback if the model is later updated
+      audioFilePath: audioFilePath,
+    );
+    if (!saveSucceeded) {
+      return;
+    }
 
     if (isCorrect) {
       await _markWordMastered(word);
@@ -386,19 +455,58 @@ class _PracticeScreenState extends State<PracticeScreen> {
       _lastWasCorrect = isCorrect;
       _feedbackMessage = fallbackFeedback;
     });
-    await attemptController.addAttempt(
+    final fallbackSaved = await _saveAttempt(
+      attemptController,
       word: word.text,
       score: fallbackScore,
       feedback: fallbackFeedback,
       transcript: normalizedTranscript,
       accuracy: fallbackAccuracy,
       duration: duration,
+      audioFilePath: audioFilePath,
     );
+    if (!fallbackSaved) {
+      return;
+    }
     _advanceToNextWord(removeCurrent: false);
   } finally {
     if (mounted) setState(() => _isProcessing = false);
   }
 }
+
+  Future<bool> _saveAttempt(
+    AttemptController controller, {
+    required String word,
+    required int score,
+    required String feedback,
+    required String transcript,
+    required double accuracy,
+    required Duration? duration,
+    required String? audioFilePath,
+  }) async {
+    try {
+      await controller.addAttempt(
+        word: word,
+        score: score,
+        feedback: feedback,
+        transcript: transcript,
+        accuracy: accuracy,
+        duration: duration,
+        audioFilePath: audioFilePath,
+      );
+      return true;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'We could not save your recording. Please check your connection and try again.';
+          _processedCurrentAttempt = false;
+        });
+      } else {
+        _processedCurrentAttempt = false;
+      }
+      return false;
+    }
+  }
 
   Future<void> _markWordMastered(WordItem word) async {
     final list = _wordLists[_currentListIndex];
