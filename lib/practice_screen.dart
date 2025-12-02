@@ -841,6 +841,14 @@ class _WordCardState extends State<_WordCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            'let\'s say',
+            style: textTheme.textStyle.copyWith(
+              fontSize: 14,
+              color: CupertinoColors.secondaryLabel,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
             widget.word.text.toUpperCase(),
             style: textTheme.navLargeTitleTextStyle.copyWith(fontSize: 36),
           ),
@@ -909,7 +917,7 @@ class _RecordingBar extends StatelessWidget {
         ? 'Listening... $remainingSeconds s'
         : isProcessing
             ? 'Checking how it sounded...'
-            : 'Tap the big button and say the word clearly.';
+            : 'Tap the button and say the word!';
 
     return SizedBox(
       width: double.infinity,
@@ -929,21 +937,6 @@ class _RecordingBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 24, color: isListening ? CupertinoColors.destructiveRed : CupertinoColors.activeBlue),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      statusText,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
                 child: CupertinoButton.filled(
@@ -961,6 +954,12 @@ class _RecordingBar extends StatelessWidget {
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                statusText,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -1011,7 +1010,7 @@ class _ResultSummary extends StatelessWidget {
           feedback,
           style: textTheme.textStyle.copyWith(fontSize: 18),
         ),
-        if (transcript.isNotEmpty) ...[
+        if (transcript.isNotEmpty && wasCorrect != true) ...[
           const SizedBox(height: 14),
           Text('You said:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold, fontSize: 16)),
           Text(transcript, style: textTheme.textStyle.copyWith(fontSize: 16)),
