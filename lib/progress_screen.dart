@@ -50,14 +50,35 @@ class _ProgressScreenState extends State<ProgressScreen> {
       builder: (context, auth, controller, classroom, _) {
         final isTeacher = auth.currentUser?.role == UserRole.teacher;
         final canShare = controller.attempts.isNotEmpty && !controller.isLoading;
+        final canRefresh = isTeacher == true &&
+            classroom.selectedStudent != null &&
+            !controller.isLoading;
 
         return CupertinoPageScaffold(
           navigationBar: CupertinoNavigationBar(
             middle: const Text('Progress'),
-            trailing: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: canShare ? () => _showExportDialog(context, controller) : null,
-              child: const Icon(CupertinoIcons.share),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isTeacher == true)
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: canRefresh
+                        ? () {
+                            final studentId = classroom.selectedStudent?.id;
+                            if (studentId != null) {
+                              controller.loadAttemptsForStudent(studentId);
+                            }
+                          }
+                        : null,
+                    child: const Icon(CupertinoIcons.refresh),
+                  ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: canShare ? () => _showExportDialog(context, controller) : null,
+                  child: const Icon(CupertinoIcons.share),
+                ),
+              ],
             ),
           ),
           child: SafeArea(
