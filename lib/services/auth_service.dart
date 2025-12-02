@@ -404,6 +404,20 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+
+  Future<AuthUser> createStudentAccount({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    return await _repository.register(
+      email: email,
+      password: password,
+      role: UserRole.student,
+      displayName: displayName,
+    );
+  }
 }
 
 class _MockUser {

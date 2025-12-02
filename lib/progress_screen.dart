@@ -33,9 +33,9 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final selectedStudent = classroom.selectedStudent;
 
     final shouldReload = selectedStudent != null &&
-        (selectedStudent.id != _lastLoadedStudent?.id || 
-        _lastLoadedStudent == null || 
-        attemptController.attempts.isEmpty);
+        (selectedStudent.id != _lastLoadedStudent?.id ||
+            _lastLoadedStudent == null ||
+            attemptController.attempts.isEmpty);
 
     if (shouldReload && !attemptController.isLoading) {
       attemptController.loadAttemptsForStudent(selectedStudent.id);
@@ -56,8 +56,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
             middle: const Text('Progress'),
             trailing: CupertinoButton(
               padding: EdgeInsets.zero,
-              onPressed:
-                  canShare ? () => _showExportDialog(context, controller) : null,
+              onPressed: canShare ? () => _showExportDialog(context, controller) : null,
               child: const Icon(CupertinoIcons.share),
             ),
           ),
@@ -112,176 +111,137 @@ class _TeacherProgressView extends StatelessWidget {
           return const Center(child: CupertinoActivityIndicator());
         }
 
-        if (classroom.assignedStudents.isEmpty || classroom.selectedStudent == null) {
-          return _TeacherClassroomEmptyState(controller: classroomController);
+        final hasStudents = classroom.assignedStudents.isNotEmpty;
+        final selectedStudent = classroom.selectedStudent;
+
+        // Always show the header
+        final header = Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: _TeacherStudentSelector(
+            classroomController: classroom,
+            attemptController: attemptController,
+          ),
+        );
+
+        // Empty classroom
+        if (!hasStudents) {
+          return Column(
+            children: [
+              header,
+              const Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(CupertinoIcons.person_3, size: 80, color: CupertinoColors.systemGrey),
+                        SizedBox(height: 24),
+                        Text(
+                          'No students in your classroom yet',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Go to the Classroom tab to add students.',
+                          style: TextStyle(color: CupertinoColors.secondaryLabel),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
         }
 
-        final selectedStudent = classroom.selectedStudent!;
+        // Autoselect first student if none selected
+        if (selectedStudent == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            classroom.selectStudent(classroom.assignedStudents.first);
+          });
+        }
 
         return Consumer<AttemptController>(
           builder: (context, attemptsCtrl, _) {
-            if (attemptsCtrl.isLoading) {
-              return const Center(child: CupertinoActivityIndicator());
-            }
-
-            if (attemptsCtrl.attempts.isEmpty) {
-              return _TeacherStudentEmptyState(student: selectedStudent);
-            }
-
             return Column(
               children: [
-                _TeacherStudentSelector(
-                  classroomController: classroomController,
-                  attemptController: attemptController,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Retain audio recordings', style: TextStyle(fontSize: 16)),
-                          CupertinoSwitch(
-                            value: selectedStudent.retainAudio,
-                            activeTrackColor: CupertinoColors.activeGreen,
-                            onChanged: classroomController.isUpdating
-                                ? null
-                                : (_) => classroomController.toggleAudioRetention(selectedStudent.id),
+                header,
+                if (attemptsCtrl.isLoading)
+                  const Expanded(child: Center(child: CupertinoActivityIndicator()))
+                else if (attemptsCtrl.attempts.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          '${selectedStudent?.displayName ?? 'This student'} has no practice attempts yet.',
+                          style: const TextStyle(fontSize: 18, color: CupertinoColors.secondaryLabel),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  )
+                else ...[
+                  // Audio retention settings
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Retain audio recordings', style: TextStyle(fontSize: 16)),
+                            CupertinoSwitch(
+                              value: selectedStudent!.retainAudio,
+                              activeTrackColor: CupertinoColors.activeGreen,
+                              onChanged: classroom.isUpdating
+                                  ? null
+                                  : (_) => classroom.toggleAudioRetention(selectedStudent.id),
+                            ),
+                          ],
+                        ),
+                        if (selectedStudent.retainAudio) ...[
+                          const SizedBox(height: 16),
+                          const Text('Keep recordings for:', style: TextStyle(fontSize: 14, color: CupertinoColors.secondaryLabel)),
+                          const SizedBox(height: 8),
+                          CupertinoSlidingSegmentedControl<int>(
+                            groupValue: selectedStudent.retentionDays,
+                            children: const {
+                              7: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('1 week')),
+                              30: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('30 days')),
+                              90: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('90 days')),
+                              365: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('1 year')),
+                            },
+                            onValueChanged: classroom.isUpdating
+                                ? (_) {}
+                                : (int? newDays) {
+                                    if (newDays != null) {
+                                      classroom.toggleAudioRetention(selectedStudent.id, newRetentionDays: newDays);
+                                    }
+                                  },
                           ),
                         ],
-                      ),
-                      if (selectedStudent.retainAudio) ...[
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Keep recordings for:',
-                          style: TextStyle(fontSize: 14, color: CupertinoColors.secondaryLabel),
-                        ),
-                        const SizedBox(height: 8),
-                        CupertinoSlidingSegmentedControl<int>(
-                          groupValue: selectedStudent.retentionDays,
-                          children: const {
-                            7:   Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('1 week')),
-                            30:  Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('30 days')),
-                            90:  Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('90 days')),
-                            365: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('1 year')),
-                          },
-                          onValueChanged: classroomController.isUpdating
-                              ? (_) {}
-                              : (int? newDays) {
-                                  if (newDays != null) {
-                                    classroomController.toggleAudioRetention(
-                                      selectedStudent.id,
-                                      newRetentionDays: newDays,
-                                    );
-                                  }
-                                },
-                        ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _ProgressBody(
-                    controller: attemptsCtrl,
-                    enableOverrides: true,
-                    onOverride: (attempt) => _showOverrideDialog(context, attemptsCtrl, attempt),
+                  Expanded(
+                    child: _ProgressBody(
+                      controller: attemptsCtrl,
+                      enableOverrides: true,
+                      onOverride: (attempt) => _showOverrideDialog(context, attemptsCtrl, attempt),
+                    ),
                   ),
-                ),
+                ],
               ],
             );
           },
         );
       },
     );
-  }
-}
-
-class _TeacherClassroomEmptyState extends StatelessWidget {
-  final ClassroomController controller;
-
-  const _TeacherClassroomEmptyState({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            'No students yet',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Add students to your classroom to track their progress.',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(color: CupertinoColors.secondaryLabel),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          CupertinoButton.filled(
-            onPressed: () => _showManageClassroom(context, controller),
-            child: const Text('Manage classroom'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TeacherStudentEmptyState extends StatelessWidget {
-  final ClassroomStudent student;
-
-  const _TeacherStudentEmptyState({required this.student});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '${student.displayName} has not completed any practice sessions yet.',
-              style: CupertinoTheme.of(context)
-                  .textTheme
-                  .textStyle
-                  .copyWith(
-                    fontSize: 18,
-                    color: CupertinoColors.secondaryLabel,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            CupertinoButton.filled(
-              onPressed: () => _showManageClassroom(context),
-              child: const Text('Manage Classroom'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showManageClassroom(BuildContext context) {
-    final classroomController = context.read<ClassroomController>();
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(
-        builder: (_) => _ClassroomManagerPage(),
-      ),
-    ).then((_) {
-      // Refresh on return
-      classroomController.refreshAvailableStudents();
-    });
   }
 }
 
@@ -296,182 +256,104 @@ class _TeacherStudentSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedName =
-        classroomController.selectedStudent?.displayName ?? 'Select student';
+    final students = classroomController.assignedStudents;
+    final hasStudents = students.isNotEmpty;
+    final selectedName = classroomController.selectedStudent?.displayName ?? 'No students yet';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: CupertinoButton(
-                  color: CupertinoColors.systemGrey5,
-                  onPressed: classroomController.assignedStudents.isEmpty
-                      ? null
-                      : () => _showStudentPicker(
-                            context,
-                            classroomController,
-                            attemptController,
-                          ),
-                  child: Text(
+          // Dropdown
+          Expanded(
+            child: CupertinoButton(
+              color: CupertinoColors.systemGrey5,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              onPressed: hasStudents ? () => _showStudentPicker(context) : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
                     selectedName,
-                    style: const TextStyle(color: CupertinoColors.black),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: hasStudents ? CupertinoColors.black : CupertinoColors.inactiveGray,
+                    ),
                   ),
-                ),
+                  Icon(
+                    CupertinoIcons.chevron_down,
+                    size: 20,
+                    color: hasStudents ? CupertinoColors.secondaryLabel : CupertinoColors.inactiveGray,
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              CupertinoButton(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                onPressed: () =>
-                    _showManageClassroom(context, classroomController),
-                child: const Text('Manage'),
-              ),
-            ],
-          ),
-          if (classroomController.isUpdating)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: CupertinoActivityIndicator(),
             ),
+          ),
         ],
       ),
     );
   }
-}
 
-Future<void> _showStudentPicker(
-  BuildContext context,
-  ClassroomController classroom,
-  AttemptController attempts,
-) async {
-  final students = classroom.assignedStudents;
-  if (students.isEmpty) return;
+  Future<void> _showStudentPicker(BuildContext context) async {
+    final students = context.read<ClassroomController>().assignedStudents;
+    final selectedId = context.read<ClassroomController>().selectedStudent?.id;
 
-  await showCupertinoModalPopup<void>(
-    context: context,
-    builder: (context) => CupertinoActionSheet(
-      title: const Text('Select a student'),
-      actions: [
-        for (final student in students)
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              classroom.selectStudent(student);
-              attempts.loadAttemptsForStudent(student.id);
-            },
-            isDefaultAction:
-                student.id == classroom.selectedStudent?.id,
-            child: Text(student.displayName),
-          ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        isDefaultAction: false,
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-    ),
-  );
-}
+    if (students.isEmpty) return;
 
-Future<void> _showManageClassroom(
-  BuildContext context,
-  ClassroomController controller,
-) async {
-  final navigator = Navigator.of(context);
-  await controller.refreshAvailableStudents();
-  await navigator.push(
-    CupertinoPageRoute<void>(
-      builder: (_) => const _ClassroomManagerPage(),
-    ),
-  );
-}
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoPageScaffold(
+        navigationBar: const CupertinoNavigationBar(
+          middle: Text('Select Student'),
+        ),
+        child: ListView.builder(
+          itemCount: students.length,
+          itemBuilder: (context, index) {
+            final student = students[index];
+            final isSelected = student.id == selectedId;
 
-class _ClassroomManagerPage extends StatelessWidget {
-  const _ClassroomManagerPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ClassroomController>(
-      builder: (context, controller, _) {
-        final assignedIds =
-            controller.assignedStudents.map((s) => s.id).toSet();
-        return CupertinoPageScaffold(
-          navigationBar: const CupertinoNavigationBar(
-            middle: Text('Manage classroom'),
-          ),
-          child: SafeArea(
-            child: controller.allStudents.isEmpty && controller.isLoading
-                ? const Center(child: CupertinoActivityIndicator())
-                : controller.allStudents.isEmpty
-                    ? const Center(
-                        child: Text('No student accounts available yet.'),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: controller.allStudents.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final student = controller.allStudents[index];
-                          final isAssigned = assignedIds.contains(student.id);
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemBackground,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: CupertinoColors.systemGrey4,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        student.displayName,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        student.email,
-                                        style: const TextStyle(
-                                          color:
-                                              CupertinoColors.secondaryLabel,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                CupertinoSwitch(
-                                  value: isAssigned,
-                                  onChanged: (value) => controller.toggleStudent(
-                                    student,
-                                    value,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+            return CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                Navigator.pop(context);
+                context.read<ClassroomController>().selectStudent(student);
+                context.read<AttemptController>().loadAttemptsForStudent(student.id);
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.systemBackground.resolveFrom(context),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.separator.resolveFrom(context),
+                    width: isSelected ? 2.5 : 1,
+                  ),
+                  boxShadow: isSelected
+                      ? [BoxShadow(color: CupertinoColors.activeBlue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        student.displayName,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontSize: 17,
+                          color: isSelected ? CupertinoColors.activeBlue : null,
+                        ),
                       ),
-          ),
-        );
-      },
+                    ),
+                    if (isSelected)
+                      const Icon(CupertinoIcons.checkmark_alt, color: CupertinoColors.activeBlue),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

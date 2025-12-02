@@ -8,6 +8,7 @@ import 'login_screen.dart';
 import 'word_list_screen.dart';
 import 'practice_screen.dart';
 import 'progress_screen.dart';
+import 'classroom_screen.dart';
 
 // Services
 import 'services/auth_service.dart';
@@ -198,6 +199,13 @@ class _AppNavigatorState extends State<AppNavigator> {
         item: const BottomNavigationBarItem(
           icon: Icon(CupertinoIcons.chart_bar_square),
           label: 'Progress',
+        ),
+      ),
+      _NavDestination(
+        screen: const ClassroomTabScreen(),
+        item: const BottomNavigationBarItem(
+          icon: Icon(CupertinoIcons.group),
+          label: 'Classroom',
         ),
       ),
     ];

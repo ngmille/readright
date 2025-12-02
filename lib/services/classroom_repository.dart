@@ -310,6 +310,27 @@ class ClassroomController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  void updateStudentLocally(ClassroomStudent updatedStudent) {
+    _assignedStudents = _assignedStudents
+        .map((s) => s.id == updatedStudent.id ? updatedStudent : s)
+        .toList();
+    notifyListeners();
+  }
+
+  Future<void> saveClassroom() async {
+    if (_teacherId == null || _repository == null) return;
+    _updating = true;
+    notifyListeners();
+    try {
+      await _repository.saveClassroomStudents(_teacherId!, _assignedStudents);
+    } catch (e) {
+      _error = 'Failed to save classroom';
+    } finally {
+      _updating = false;
+      notifyListeners();
+    }
+  }
 }
 
 extension FirstWhereOrNull<E> on Iterable<E> {
