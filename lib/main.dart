@@ -248,35 +248,22 @@ class _StudentPracticeShell extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // University icon
+              SizedBox(
+                height: 200,
+                child: Image.asset(
+                  'assets/icons/university.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+
               const SizedBox(height: 48),
-              Text(
-                'Ready to read?',
-                style: CupertinoTheme.of(context)
-                    .textTheme
-                    .textStyle
-                    .copyWith(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Tap Begin and we\'ll read words together.',
-                style: CupertinoTheme.of(context)
-                    .textTheme
-                    .textStyle
-                    .copyWith(
-                      fontSize: 20,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 64),
+
+              // Big friendly Begin! button
               SizedBox(
                 width: double.infinity,
                 child: CupertinoButton.filled(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   onPressed: () {
                     Navigator.of(context).push(
                       CupertinoPageRoute<void>(
@@ -285,8 +272,11 @@ class _StudentPracticeShell extends StatelessWidget {
                     );
                   },
                   child: const Text(
-                    'Begin',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+                    'Begin!',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
@@ -297,6 +287,8 @@ class _StudentPracticeShell extends StatelessWidget {
     );
   }
 }
+
+
 
 class _StudentAccountPage extends StatelessWidget {
   const _StudentAccountPage();

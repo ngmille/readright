@@ -847,18 +847,38 @@ class _WordCardState extends State<_WordCard> {
               color: CupertinoColors.secondaryLabel,
             ),
           ),
+
           const SizedBox(height: 4),
+
+          // BIG WORD
           Text(
             widget.word.text.toUpperCase(),
             style: textTheme.navLargeTitleTextStyle.copyWith(fontSize: 36),
           ),
-          const SizedBox(height: 8),
+
+          const SizedBox(height: 12),
+
+          // ⭐ PNG IMAGE FOR THE WORD CARD
+          Center(
+            child: SizedBox(
+              height: 140, // adjust as needed
+              child: Image.asset(
+                'assets/icons/education.png',   // <-- your PNG here
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // SAMPLE SENTENCES BUTTON
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: () => setState(() => _showSentences = !_showSentences),
             child: Row(
               children: [
-                const Icon(CupertinoIcons.book_solid, size: 20, color: CupertinoColors.activeBlue),
+                const Icon(CupertinoIcons.book_solid,
+                    size: 20, color: CupertinoColors.activeBlue),
                 const SizedBox(width: 8),
                 Text(
                   'Sample sentences',
@@ -873,6 +893,8 @@ class _WordCardState extends State<_WordCard> {
               ],
             ),
           ),
+
+          // SENTENCES LIST
           if (_showSentences) ...[
             const SizedBox(height: 8),
             ...widget.word.sampleSentences.map(
@@ -882,7 +904,9 @@ class _WordCardState extends State<_WordCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('• '),
-                    Expanded(child: Text(sentence, style: textTheme.textStyle)),
+                    Expanded(
+                      child: Text(sentence, style: textTheme.textStyle),
+                    ),
                   ],
                 ),
               ),
@@ -893,6 +917,7 @@ class _WordCardState extends State<_WordCard> {
     );
   }
 }
+
 
 class _RecordingBar extends StatelessWidget {
   final bool isListening;
@@ -974,7 +999,7 @@ class _ResultSummary extends StatelessWidget {
   final String feedback;
   final double accuracy;
   final bool? wasCorrect;
-  final String? phonemeFeedback; 
+  final String? phonemeFeedback;
 
   const _ResultSummary({
     required this.transcript,
@@ -992,41 +1017,116 @@ class _ResultSummary extends StatelessWidget {
         : wasCorrect == false
             ? CupertinoColors.systemOrange
             : CupertinoColors.label;
+
     final textTheme = CupertinoTheme.of(context).textTheme;
+
+    // Headline & helper
     final headline = wasCorrect == true ? 'Nice reading!' : 'Keep trying!';
     final helper = wasCorrect == true
         ? 'You said it just right.'
         : 'Listen carefully and give it another go.';
 
     return _CupertinoCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(headline, style: textTheme.navTitleTextStyle.copyWith(fontSize: 24, color: color)),
-        const SizedBox(height: 4),
-        Text(helper, style: textTheme.textStyle.copyWith(fontSize: 18)),
-        const SizedBox(height: 12),
-        Text(scoreText, style: textTheme.textStyle.copyWith(fontSize: 18, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        Text(
-          feedback,
-          style: textTheme.textStyle.copyWith(fontSize: 18),
-        ),
-        if (transcript.isNotEmpty && wasCorrect != true) ...[
-          const SizedBox(height: 14),
-          Text('You said:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold, fontSize: 16)),
-          Text(transcript, style: textTheme.textStyle.copyWith(fontSize: 16)),
-        ],
-        if (phonemeFeedback != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Tip: $phonemeFeedback',
-            style: textTheme.textStyle.copyWith(color: CupertinoColors.activeBlue, fontSize: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Headline
+          Center(
+            child: Text(
+              headline,
+              style: textTheme.navTitleTextStyle.copyWith(
+                fontSize: 24,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
+
+          const SizedBox(height: 8),
+
+          // ⭐ Show different PNG depending on correct / incorrect
+          if (wasCorrect == true) ...[
+            Center(
+              child: SizedBox(
+                height: 140,
+                child: Image.asset(
+                  'assets/icons/trophy.png',    // <<< correct image
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ] else if (wasCorrect == false) ...[
+            Center(
+              child: SizedBox(
+                height: 140,
+                child: Image.asset(
+                  'assets/icons/back-to-school.png',   // <<< incorrect image
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Helper line
+          Text(
+            helper,
+            style: textTheme.textStyle.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 12),
+
+          // Score
+          Text(
+            scoreText,
+            style: textTheme.textStyle.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Feedback text
+          Text(
+            feedback,
+            style: textTheme.textStyle.copyWith(fontSize: 18),
+          ),
+
+          // Transcript shown only when incorrect
+          if (transcript.isNotEmpty && wasCorrect != true) ...[
+            const SizedBox(height: 14),
+            Text(
+              'You said:',
+              style: textTheme.textStyle.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            Text(
+              transcript,
+              style: textTheme.textStyle.copyWith(fontSize: 16),
+            ),
+          ],
+
+          // Phoneme tip
+          if (phonemeFeedback != null && phonemeFeedback!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Tip: $phonemeFeedback',
+              style: textTheme.textStyle.copyWith(
+                color: CupertinoColors.activeBlue,
+                fontSize: 16,
+              ),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
 
+
+// ✅ Now we start the card class
 class _CupertinoCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -1057,3 +1157,4 @@ class _CupertinoCard extends StatelessWidget {
     );
   }
 }
+

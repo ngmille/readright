@@ -162,11 +162,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          if (_isSignUpMode) ...[
-                            // 🔹 Cartoon role selector replaces segmented control
-                            _buildRoleSelector(),
-                            const SizedBox(height: 24),
-                          ],
+                          // 🔹 Always show monkey icons for BOTH sign in & sign up
+                          _buildRoleSelector(),
+                          const SizedBox(height: 24),
 
                           CupertinoFormSection.insetGrouped(
                             backgroundColor: CupertinoColors.systemBackground,
@@ -238,6 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // Role is REQUIRED only in sign-up mode
     if (_isSignUpMode && _selectedRole == null) {
       setState(() => _roleError = 'Select a role to continue');
       return;
@@ -305,8 +304,11 @@ class _LoginScreenState extends State<LoginScreen> {
           _passwordController.text = 'teacher123';
           break;
       }
+      // Use sign-in mode when using demo accounts
       _isSignUpMode = false;
       _roleError = null;
+      // Visually highlight the selected monkey too
+      _selectedRole = role;
     });
     context.read<AuthController>().clearError();
   }
@@ -344,7 +346,7 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             _RoleButton(
               label: "I'm a Student",
-              imagePath: 'assets/icons/Studentmonkey.png',
+              imagePath: 'assets/icons/elearning.png',
               selected: _selectedRole == UserRole.student,
               onTap: () {
                 _selectRole(UserRole.student);
@@ -352,7 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             _RoleButton(
               label: "I'm a Teacher",
-              imagePath: 'assets/icons/Teachermonkey.png',
+              imagePath: 'assets/icons/teacher.png',
               selected: _selectedRole == UserRole.teacher,
               onTap: () {
                 _selectRole(UserRole.teacher);
@@ -360,6 +362,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
+        // Only show error text if we're in sign-up mode
         if (_isSignUpMode && _roleError != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),

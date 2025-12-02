@@ -51,3 +51,7 @@ lib/
 - Attempts are held in memory; persistence per student will come in a future milestone.
 - The practice flow uses the system STT engine plus a Levenshtein scorer; swapping in a cloud or custom provider only requires implementing `PronunciationAssessor`.
 - Teacher dashboard and richer analytics are placeholders pending later milestones.
+
+## Attributes for App Art
+- <a href="https://www.flaticon.com/free-stickers/teacher" title="teacher stickers">Teacher stickers created by Stickers - Flaticon</a>
+
