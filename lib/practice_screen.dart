@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:readright/services/pronunciation_service.dart';
@@ -831,6 +832,18 @@ class _WordCard extends StatefulWidget {
 
 class _WordCardState extends State<_WordCard> {
   bool _showSentences = false;
+  final FlutterTts _tts = FlutterTts();
+
+  Future<void> _speakWord() async {
+    try {
+      await _tts.stop();
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.4);
+      await _tts.speak(widget.word.text);
+    } catch (_) {
+      // Ignore TTS errors in UI
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -850,15 +863,33 @@ class _WordCardState extends State<_WordCard> {
 
           const SizedBox(height: 4),
 
-          // BIG WORD
-          Text(
-            widget.word.text.toUpperCase(),
-            style: textTheme.navLargeTitleTextStyle.copyWith(fontSize: 36),
+          // BIG WORD + SPEAK BUTTON
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  widget.word.text.toUpperCase(),
+                  style: textTheme.navLargeTitleTextStyle.copyWith(fontSize: 36),
+                ),
+              ),
+              const SizedBox(width: 12),
+              CupertinoButton(
+                padding: const EdgeInsets.all(8),
+                minSize: 32,
+                onPressed: _speakWord,
+                child: const Icon(
+                  CupertinoIcons.speaker_2_fill,
+                  size: 28,
+                  color: CupertinoColors.activeBlue,
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 12),
 
-          // ⭐ PNG IMAGE FOR THE WORD CARD
+          // PNG IMAGE FOR THE WORD CARD
           Center(
             child: SizedBox(
               height: 140, // adjust as needed
@@ -1044,7 +1075,7 @@ class _ResultSummary extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          // ⭐ Show different PNG depending on correct / incorrect
+          // Show different PNG depending on correct / incorrect
           if (wasCorrect == true) ...[
             Center(
               child: SizedBox(
@@ -1126,7 +1157,7 @@ class _ResultSummary extends StatelessWidget {
 }
 
 
-// ✅ Now we start the card class
+// Now we start the card class
 class _CupertinoCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -1157,4 +1188,3 @@ class _CupertinoCard extends StatelessWidget {
     );
   }
 }
-
