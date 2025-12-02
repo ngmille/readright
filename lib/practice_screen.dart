@@ -656,58 +656,63 @@ class _PracticeScreenState extends State<PracticeScreen> {
     final totalCount = currentList.items.length;
 
     return _buildPracticePage(
-      SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _ListProgressHeader(
-              listTitle: currentList.title,
-              listPosition: _currentListIndex + 1,
-              totalLists: _wordLists.length,
-              masteredCount: masteredCount,
-              totalCount: totalCount,
+      Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ListProgressHeader(
+                    listTitle: currentList.title,
+                    listPosition: _currentListIndex + 1,
+                    totalLists: _wordLists.length,
+                    masteredCount: masteredCount,
+                    totalCount: totalCount,
+                  ),
+                  const SizedBox(height: 16),
+                  _WordCard(word: currentWord),
+                  if (_errorMessage != null && !_isListening) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: CupertinoColors.destructiveRed),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  if (_feedbackMessage != null) ...[
+                    const SizedBox(height: 16),
+                    _ResultSummary(
+                      transcript: _lastTranscript,
+                      feedback: _feedbackMessage!,
+                      accuracy: _lastAccuracy,
+                      wasCorrect: _lastWasCorrect,
+                      phonemeFeedback: _phonemeFeedback,
+                    ),
+                  ],
+                  if (_lastWasCorrect == false && !_isListening && !_isProcessing) ...[
+                    const SizedBox(height: 16),
+                    CupertinoButton(
+                      onPressed: _startListening,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: const Text('Try again'),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            _WordCard(word: currentWord),
-            const SizedBox(height: 16),
-            _RecordingCard(
-              isListening: _isListening,
-              isProcessing: _isProcessing || attemptController.isSaving,
-              remainingSeconds: _remainingSeconds,
-              onRecordPressed: _isListening
-                  ? () => _stopListening(auto: false)
-                  : () => _startListening(),
-              canPress: !_isProcessing,
-            ),
-            if (_errorMessage != null && !_isListening) ...[
-              const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: CupertinoColors.destructiveRed),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (_feedbackMessage != null) ...[
-              const SizedBox(height: 16),
-              _ResultSummary(
-                transcript: _lastTranscript,
-                feedback: _feedbackMessage!,
-                accuracy: _lastAccuracy,
-                wasCorrect: _lastWasCorrect,
-                phonemeFeedback: _phonemeFeedback,
-              ),
-            ],
-            if (_lastWasCorrect == false && !_isListening && !_isProcessing) ...[
-              const SizedBox(height: 16),
-              CupertinoButton(
-                onPressed: _startListening,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: const Text('Try again'),
-              ),
-            ],
-          ],
-        ),
+          ),
+          _RecordingBar(
+            isListening: _isListening,
+            isProcessing: _isProcessing || attemptController.isSaving,
+            remainingSeconds: _remainingSeconds,
+            onRecordPressed: _isListening
+                ? () => _stopListening(auto: false)
+                : () => _startListening(),
+            canPress: !_isProcessing,
+          ),
+        ],
       ),
     );
   }
@@ -815,10 +820,17 @@ class _ListProgressHeader extends StatelessWidget {
   }
 }
 
-class _WordCard extends StatelessWidget {
+class _WordCard extends StatefulWidget {
   final WordItem word;
 
   const _WordCard({required this.word});
+
+  @override
+  State<_WordCard> createState() => _WordCardState();
+}
+
+class _WordCardState extends State<_WordCard> {
+  bool _showSentences = false;
 
   @override
   Widget build(BuildContext context) {
@@ -829,38 +841,59 @@ class _WordCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            word.text.toUpperCase(),
+            widget.word.text.toUpperCase(),
             style: textTheme.navLargeTitleTextStyle.copyWith(fontSize: 36),
           ),
-          const SizedBox(height: 12),
-          Text('Sample sentences:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          ...word.sampleSentences.map(
-            (sentence) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('• '),
-                  Expanded(child: Text(sentence, style: textTheme.textStyle)),
-                ],
-              ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () => setState(() => _showSentences = !_showSentences),
+            child: Row(
+              children: [
+                const Icon(CupertinoIcons.book_solid, size: 20, color: CupertinoColors.activeBlue),
+                const SizedBox(width: 8),
+                Text(
+                  'Sample sentences',
+                  style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                Icon(
+                  _showSentences ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                  size: 18,
+                  color: CupertinoColors.inactiveGray,
+                ),
+              ],
             ),
           ),
+          if (_showSentences) ...[
+            const SizedBox(height: 8),
+            ...widget.word.sampleSentences.map(
+              (sentence) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• '),
+                    Expanded(child: Text(sentence, style: textTheme.textStyle)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _RecordingCard extends StatelessWidget {
+class _RecordingBar extends StatelessWidget {
   final bool isListening;
   final bool isProcessing;
   final int remainingSeconds;
   final Future<void> Function() onRecordPressed;
   final bool canPress;
 
-  const _RecordingCard({
+  const _RecordingBar({
     required this.isListening,
     required this.isProcessing,
     required this.remainingSeconds,
@@ -875,28 +908,63 @@ class _RecordingCard extends StatelessWidget {
     final statusText = isListening
         ? 'Listening... $remainingSeconds s'
         : isProcessing
-            ? 'Checking pronunciation...'
-            : 'Tap record and say the word clearly.';
+            ? 'Checking how it sounded...'
+            : 'Tap the big button and say the word clearly.';
 
-    return _CupertinoCard(
-      child: Column(
-        children: [
-          Icon(icon, size: 72, color: isListening ? CupertinoColors.destructiveRed : CupertinoColors.activeBlue),
-          const SizedBox(height: 12),
-          Text(statusText, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 16),
-          CupertinoButton.filled(
-            onPressed: canPress ? () => onRecordPressed() : null,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18),
-                const SizedBox(width: 8),
-                Text(label),
-              ],
+    return SizedBox(
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: CupertinoColors.systemGrey5,
+          boxShadow: [
+            BoxShadow(
+              color: CupertinoColors.systemGrey3,
+              blurRadius: 8,
+              offset: Offset(0, -2),
             ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 24, color: isListening ? CupertinoColors.destructiveRed : CupertinoColors.activeBlue),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      statusText,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: CupertinoButton.filled(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  onPressed: canPress ? () => onRecordPressed() : null,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 24),
+                      const SizedBox(width: 10),
+                      Text(
+                        label,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -926,21 +994,34 @@ class _ResultSummary extends StatelessWidget {
             ? CupertinoColors.systemOrange
             : CupertinoColors.label;
     final textTheme = CupertinoTheme.of(context).textTheme;
+    final headline = wasCorrect == true ? 'Nice reading!' : 'Keep trying!';
+    final helper = wasCorrect == true
+        ? 'You said it just right.'
+        : 'Listen carefully and give it another go.';
 
     return _CupertinoCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(scoreText, style: textTheme.navTitleTextStyle.copyWith(fontSize: 20, color: color)),
+        Text(headline, style: textTheme.navTitleTextStyle.copyWith(fontSize: 24, color: color)),
+        const SizedBox(height: 4),
+        Text(helper, style: textTheme.textStyle.copyWith(fontSize: 18)),
+        const SizedBox(height: 12),
+        Text(scoreText, style: textTheme.textStyle.copyWith(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        Text(feedback, style: textTheme.textStyle),
+        Text(
+          feedback,
+          style: textTheme.textStyle.copyWith(fontSize: 18),
+        ),
         if (transcript.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text('You said:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold)),
-          Text(transcript, style: textTheme.textStyle),
+          const SizedBox(height: 14),
+          Text('You said:', style: textTheme.textStyle.copyWith(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(transcript, style: textTheme.textStyle.copyWith(fontSize: 16)),
         ],
         if (phonemeFeedback != null) ...[
-          const SizedBox(height: 8),
-          Text('Tip: $phonemeFeedback',
-              style: textTheme.textStyle.copyWith(color: CupertinoColors.activeBlue, fontSize: 14)),
+          const SizedBox(height: 12),
+          Text(
+            'Tip: $phonemeFeedback',
+            style: textTheme.textStyle.copyWith(color: CupertinoColors.activeBlue, fontSize: 16),
+          ),
         ],
       ]),
     );
