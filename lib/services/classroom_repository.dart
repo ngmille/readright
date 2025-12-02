@@ -7,11 +7,13 @@ class ClassroomStudent {
   final String id;
   final String email;
   final String displayName;
+  final bool retainAudio;
 
   const ClassroomStudent({
     required this.id,
     required this.email,
     required this.displayName,
+    required this.retainAudio,
   });
 
   Map<String, dynamic> toMap() => {
@@ -25,6 +27,21 @@ class ClassroomStudent {
       id: data['id'] as String? ?? '',
       email: data['email'] as String? ?? '',
       displayName: data['displayName'] as String? ?? 'Student',
+      retainAudio: data['retainAudio'] as bool? ?? false,
+    );
+  }
+
+  ClassroomStudent copyWith({
+    String? id,
+    String? email,
+    String? displayName,
+    bool? retainAudio,
+  }) {
+    return ClassroomStudent(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      displayName: displayName ?? this.displayName,
+      retainAudio: retainAudio ?? this.retainAudio,
     );
   }
 }
@@ -51,6 +68,7 @@ class ClassroomRepository {
             email: doc.data()['email'] as String? ?? '',
             displayName: doc.data()['displayName'] as String? ??
                 (doc.data()['username'] as String? ?? 'Student'),
+            retainAudio: doc.data()['retainAudio'] as bool? ?? false
           ),
         )
         .toList(growable: false);
@@ -135,35 +153,82 @@ class ClassroomController extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleStudent(ClassroomStudent student, bool include) async {
-    final repo = _repository;
-    final teacherId = _teacherId;
-    if (teacherId == null || repo == null) return;
-    final exists = _assignedStudents.any((s) => s.id == student.id);
-    if (include && exists) return;
-    if (!include && !exists) return;
+  Future<void> toggleAudioRetention(String studentId) async {
+    final student = _assignedStudents.firstWhereOrNull((s) => s.id == studentId);
+    if (student == null || _repository == null) return;
+
+    final newValue = !student.retainAudio;
 
     _updating = true;
     notifyListeners();
+
     try {
-      if (include) {
-        _assignedStudents = [..._assignedStudents, student];
-      } else {
-        _assignedStudents =
-            _assignedStudents.where((s) => s.id != student.id).toList();
-        if (_selectedStudent?.id == student.id) {
-          _selectedStudent = null;
-        }
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(studentId)
+          .set({'retainAudio': newValue}, SetOptions(merge: true));
+
+      final updatedList = _assignedStudents.map((s) {
+        return s.id == studentId ? s.copyWith(retainAudio: newValue) : s;
+      }).toList();
+
+      _assignedStudents = updatedList;
+
+      if (_selectedStudent?.id == studentId) {
+        _selectedStudent = _selectedStudent!.copyWith(retainAudio: newValue);
       }
-      await repo.saveClassroomStudents(teacherId, _assignedStudents);
+
       _error = null;
-    } catch (error) {
-      _error = 'Unable to update classroom';
+    } catch (e) {
+      _error = 'Failed to update audio setting';
     } finally {
       _updating = false;
       notifyListeners();
     }
   }
+
+  Future<void> toggleStudent(ClassroomStudent student, bool include) async {
+  final repo = _repository;
+  final teacherId = _teacherId;
+  if (teacherId == null || repo == null) return;
+
+  final exists = _assignedStudents.any((s) => s.id == student.id);
+  if (include && exists) return;
+  if (!include && !exists) return;
+
+  _updating = true;
+  notifyListeners();
+
+  try {
+    if (include) { // add student
+      _assignedStudents = [..._assignedStudents, student];
+      _selectedStudent = student;
+
+    } else { // remove student
+      _assignedStudents = _assignedStudents.where((s) => s.id != student.id).toList();
+      
+      // Only deselect if they were the currently selected one
+      if (_selectedStudent?.id == student.id) {
+        _selectedStudent = null;
+      }
+    }
+
+    await repo.saveClassroomStudents(teacherId, _assignedStudents);
+    _error = null;
+  } catch (error) {
+    _error = 'Unable to update classroom';
+    // Rollback on error
+    if (include) {
+      _assignedStudents.removeWhere((s) => s.id == student.id);
+      if (_selectedStudent?.id == student.id) _selectedStudent = null;
+    } else {
+      _assignedStudents = [..._assignedStudents, student];
+    }
+  } finally {
+    _updating = false;
+    notifyListeners();
+  }
+}
 
   void selectStudent(ClassroomStudent student) {
     _selectedStudent = student;
@@ -192,5 +257,14 @@ class ClassroomController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
+  }
+}
+
+extension FirstWhereOrNull<E> on Iterable<E> {
+  E? firstWhereOrNull(bool Function(E) test) {
+    for (final element in this) {
+      if (test(element)) return element;
+    }
+    return null;
   }
 }

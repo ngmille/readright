@@ -14,28 +14,41 @@ import '../services/auth_service.dart';
 import '../services/classroom_repository.dart';
 import 'package:audioplayers/audioplayers.dart';
 
-class ProgressScreen extends StatelessWidget {
+class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
+
+  @override
+  State<ProgressScreen> createState() => _ProgressScreenState();
+}
+
+class _ProgressScreenState extends State<ProgressScreen> {
+  ClassroomStudent? _lastLoadedStudent;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final classroom = context.watch<ClassroomController>();
+    final attemptController = context.read<AttemptController>();
+    final selectedStudent = classroom.selectedStudent;
+
+    final shouldReload = selectedStudent != null &&
+        (selectedStudent.id != _lastLoadedStudent?.id || 
+        _lastLoadedStudent == null || 
+        attemptController.attempts.isEmpty);
+
+    if (shouldReload && !attemptController.isLoading) {
+      attemptController.loadAttemptsForStudent(selectedStudent.id);
+    }
+
+    _lastLoadedStudent = selectedStudent;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer3<AuthController, AttemptController, ClassroomController>(
       builder: (context, auth, controller, classroom, _) {
         final isTeacher = auth.currentUser?.role == UserRole.teacher;
-
-        if (isTeacher == true) {
-          final selectedStudent = classroom.selectedStudent;
-          if (selectedStudent != null &&
-              controller.activeStudentId != selectedStudent.id &&
-              !controller.isLoading) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              context
-                  .read<AttemptController>()
-                  .loadAttemptsForStudent(selectedStudent.id);
-            });
-          }
-        }
-
         final canShare = controller.attempts.isNotEmpty && !controller.isLoading;
 
         return CupertinoPageScaffold(
@@ -93,41 +106,62 @@ class _TeacherProgressView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (classroomController.isLoading) {
-      return const Center(child: CupertinoActivityIndicator());
-    }
+    return Consumer<ClassroomController>(
+      builder: (context, classroom, _) {
+        if (classroom.isLoading) {
+          return const Center(child: CupertinoActivityIndicator());
+        }
 
-    if (classroomController.assignedStudents.isEmpty) {
-      return _TeacherClassroomEmptyState(controller: classroomController);
-    }
+        if (classroom.assignedStudents.isEmpty || classroom.selectedStudent == null) {
+          return _TeacherClassroomEmptyState(controller: classroomController);
+        }
 
-    final selectedStudent = classroomController.selectedStudent;
-    if (selectedStudent == null) {
-      return _TeacherClassroomEmptyState(controller: classroomController);
-    }
+        final selectedStudent = classroom.selectedStudent!;
 
-    return Column(
-      children: [
-        _TeacherStudentSelector(
-          classroomController: classroomController,
-          attemptController: attemptController,
-        ),
-        Expanded(
-          child: attemptController.isLoading
-              ? const Center(child: CupertinoActivityIndicator())
-              : attemptController.attempts.isEmpty
-                  ? _TeacherStudentEmptyState(student: selectedStudent)
-                  : _ProgressBody(
-                      controller: attemptController,
-                      enableOverrides: true,
-                      onOverride: (attempt) => _showOverrideDialog(
-                        context,
-                        attemptController,
-                        attempt,
+        return Consumer<AttemptController>(
+          builder: (context, attemptsCtrl, _) {
+            if (attemptsCtrl.isLoading) {
+              return const Center(child: CupertinoActivityIndicator());
+            }
+
+            if (attemptsCtrl.attempts.isEmpty) {
+              return _TeacherStudentEmptyState(student: selectedStudent);
+            }
+
+            return Column(
+              children: [
+                _TeacherStudentSelector(
+                  classroomController: classroomController,
+                  attemptController: attemptController,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Retain audio recordings', style: TextStyle(fontSize: 16)),
+                      CupertinoSwitch(
+                        value: selectedStudent.retainAudio,
+                        activeTrackColor: CupertinoColors.activeGreen,
+                        onChanged: classroom.isUpdating
+                            ? null
+                            : (_) => classroom.toggleAudioRetention(selectedStudent.id),
                       ),
-                    ),
-        ),
-      ],
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _ProgressBody(
+                    controller: attemptsCtrl,
+                    enableOverrides: true,
+                    onOverride: (attempt) => _showOverrideDialog(context, attemptsCtrl, attempt),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -180,17 +214,42 @@ class _TeacherStudentEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          '${student.displayName} has not completed any practice sessions yet.',
-          style: CupertinoTheme.of(context)
-              .textTheme
-              .textStyle
-              .copyWith(color: CupertinoColors.secondaryLabel),
-          textAlign: TextAlign.center,
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '${student.displayName} has not completed any practice sessions yet.',
+              style: CupertinoTheme.of(context)
+                  .textTheme
+                  .textStyle
+                  .copyWith(
+                    fontSize: 18,
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            CupertinoButton.filled(
+              onPressed: () => _showManageClassroom(context),
+              child: const Text('Manage Classroom'),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  void _showManageClassroom(BuildContext context) {
+    final classroomController = context.read<ClassroomController>();
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => _ClassroomManagerPage(),
+      ),
+    ).then((_) {
+      // Refresh on return
+      classroomController.refreshAvailableStudents();
+    });
   }
 }
 

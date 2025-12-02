@@ -4,7 +4,7 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../models/attempt_model.dart';
 import 'auth_service.dart';
@@ -206,12 +206,31 @@ class AttemptController extends ChangeNotifier {
     }
   }
 
-  Future<void> loadAttemptsForStudent(String studentId) async {
-    if (_authUserRole != UserRole.teacher) return;
-    if (_activeStudentId == studentId && _attempts.isNotEmpty) return;
-    _activeStudentId = studentId;
-    await _loadAttemptsFor(studentId);
+Future<void> loadAttemptsForStudent(String studentId) async {
+  if (_authUserRole != UserRole.teacher) return;
+  if (_loading && _activeStudentId == studentId) return;
+  _activeStudentId = studentId;
+
+  _attempts = [];
+  _loading = true;
+  _error = null;
+
+  // Use addPostFrameCallback to avoid setState during build
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    notifyListeners();
+  });
+
+  try {
+    final freshAttempts = await _repository.fetchAttempts(userId: studentId);
+    _attempts = freshAttempts;
+  } catch (e) {
+    _error = 'Failed to load attempts';
+    _attempts = [];
+  } finally {
+    _loading = false;
+    notifyListeners();
   }
+}
 
   Future<void> addAttempt({
     required String word,
@@ -305,12 +324,15 @@ class AttemptController extends ChangeNotifier {
 
   Future<void> _loadAttemptsFor(String userId) async {
     _loading = true;
+    _attempts = [];
+    _error = null;
     notifyListeners();
     try {
       _attempts = await _repository.fetchAttempts(userId: userId);
       _error = null;
     } catch (_) {
       _error = 'Unable to load attempts';
+      _attempts = [];
     } finally {
       _loading = false;
       notifyListeners();
