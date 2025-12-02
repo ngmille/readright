@@ -136,17 +136,49 @@ class _TeacherProgressView extends StatelessWidget {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Retain audio recordings', style: TextStyle(fontSize: 16)),
-                      CupertinoSwitch(
-                        value: selectedStudent.retainAudio,
-                        activeTrackColor: CupertinoColors.activeGreen,
-                        onChanged: classroom.isUpdating
-                            ? null
-                            : (_) => classroom.toggleAudioRetention(selectedStudent.id),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Retain audio recordings', style: TextStyle(fontSize: 16)),
+                          CupertinoSwitch(
+                            value: selectedStudent.retainAudio,
+                            activeTrackColor: CupertinoColors.activeGreen,
+                            onChanged: classroomController.isUpdating
+                                ? null
+                                : (_) => classroomController.toggleAudioRetention(selectedStudent.id),
+                          ),
+                        ],
                       ),
+                      if (selectedStudent.retainAudio) ...[
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Keep recordings for:',
+                          style: TextStyle(fontSize: 14, color: CupertinoColors.secondaryLabel),
+                        ),
+                        const SizedBox(height: 8),
+                        CupertinoSlidingSegmentedControl<int>(
+                          groupValue: selectedStudent.retentionDays,
+                          children: const {
+                            7:   Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('1 week')),
+                            30:  Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('30 days')),
+                            90:  Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('90 days')),
+                            365: Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('1 year')),
+                          },
+                          onValueChanged: classroomController.isUpdating
+                              ? (_) {}
+                              : (int? newDays) {
+                                  if (newDays != null) {
+                                    classroomController.toggleAudioRetention(
+                                      selectedStudent.id,
+                                      newRetentionDays: newDays,
+                                    );
+                                  }
+                                },
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -164,8 +164,6 @@ class FirebaseAuthRepository implements AuthRepository {
       );
     }
 
-    final bool retainAudio = data['retainAudio'] as bool? ?? false;
-
     return AuthUser(
       id: user.uid,
       displayName: (data['displayName'] as String?) ??
@@ -202,6 +200,7 @@ class FirebaseAuthRepository implements AuthRepository {
       'displayName': _resolveDisplayName(displayName, email),
       'createdAt': FieldValue.serverTimestamp(),
       'retainAudio': false,
+      'retentionDays': 30,
     };
   }
 

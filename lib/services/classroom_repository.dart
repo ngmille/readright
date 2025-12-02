@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import 'auth_service.dart';
@@ -8,18 +11,22 @@ class ClassroomStudent {
   final String email;
   final String displayName;
   final bool retainAudio;
+  final int retentionDays;
 
   const ClassroomStudent({
     required this.id,
     required this.email,
     required this.displayName,
-    required this.retainAudio,
+    this.retainAudio = false,
+    this.retentionDays = 30,
   });
 
   Map<String, dynamic> toMap() => {
         'id': id,
         'email': email,
         'displayName': displayName,
+        'retainAudio': retainAudio,
+        'retentionDays': retentionDays,
       };
 
   factory ClassroomStudent.fromMap(Map<String, dynamic> data) {
@@ -28,6 +35,7 @@ class ClassroomStudent {
       email: data['email'] as String? ?? '',
       displayName: data['displayName'] as String? ?? 'Student',
       retainAudio: data['retainAudio'] as bool? ?? false,
+      retentionDays: data['retentionDays'] as int? ?? 30,
     );
   }
 
@@ -36,12 +44,14 @@ class ClassroomStudent {
     String? email,
     String? displayName,
     bool? retainAudio,
+    int? retentionDays,
   }) {
     return ClassroomStudent(
       id: id ?? this.id,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
       retainAudio: retainAudio ?? this.retainAudio,
+      retentionDays: retentionDays ?? this.retentionDays,
     );
   }
 }
@@ -68,7 +78,8 @@ class ClassroomRepository {
             email: doc.data()['email'] as String? ?? '',
             displayName: doc.data()['displayName'] as String? ??
                 (doc.data()['username'] as String? ?? 'Student'),
-            retainAudio: doc.data()['retainAudio'] as bool? ?? false
+            retainAudio: doc.data()['retainAudio'] as bool? ?? false,
+            retentionDays: doc.data()['retentionDays'] as int? ?? 30,
           ),
         )
         .toList(growable: false);
@@ -88,15 +99,17 @@ class ClassroomRepository {
         .toList(growable: false);
   }
 
-  Future<void> saveClassroomStudents(
-    String teacherId,
-    List<ClassroomStudent> students,
-  ) async {
-    await _classroomDoc(teacherId).set({
-      'teacherId': teacherId,
-      'students': students.map((e) => e.toMap()).toList(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+
+  Future<void> saveClassroomStudents(String teacherId, List<ClassroomStudent> students) async {
+    final batch = _firestore.batch();
+    final teacherRef = _firestore.collection('teachers').doc(teacherId);
+
+    for (final student in students) {
+      final docRef = teacherRef.collection('students').doc(student.id);
+      batch.set(docRef, student.toMap(), SetOptions(merge: true));
+    }
+
+    await batch.commit();
   }
 }
 
@@ -153,81 +166,120 @@ class ClassroomController extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleAudioRetention(String studentId) async {
+  Future<void> toggleAudioRetention(String studentId, {int? newRetentionDays}) async {
     final student = _assignedStudents.firstWhereOrNull((s) => s.id == studentId);
-    if (student == null || _repository == null) return;
-
-    final newValue = !student.retainAudio;
+    if (student == null) return;
 
     _updating = true;
     notifyListeners();
 
     try {
+      final bool newRetainAudio = newRetentionDays != null ? true : !student.retainAudio;
+      final int newDays = newRetentionDays ?? student.retentionDays;
+
+      final updatedStudent = student.copyWith(
+        retainAudio: newRetainAudio,
+        retentionDays: newDays,
+      );
+
+      // Update local state
+      _assignedStudents = _assignedStudents.map((s) => s.id == studentId ? updatedStudent : s).toList();
+      if (_selectedStudent?.id == studentId) {
+        _selectedStudent = updatedStudent;
+      }
+
+      // Save to firebase
+      await _repository?.saveClassroomStudents(_teacherId!, _assignedStudents);
       await FirebaseFirestore.instance
           .collection('users')
           .doc(studentId)
-          .set({'retainAudio': newValue}, SetOptions(merge: true));
+          .set({
+        'retainAudio': newRetainAudio,
+        'retentionDays': newDays,
+      }, SetOptions(merge: true));
 
-      final updatedList = _assignedStudents.map((s) {
-        return s.id == studentId ? s.copyWith(retainAudio: newValue) : s;
-      }).toList();
-
-      _assignedStudents = updatedList;
-
-      if (_selectedStudent?.id == studentId) {
-        _selectedStudent = _selectedStudent!.copyWith(retainAudio: newValue);
+      if (!newRetainAudio) {
+        unawaited(_cleanupOldAudio(studentId));
       }
 
-      _error = null;
+      notifyListeners();
     } catch (e) {
-      _error = 'Failed to update audio setting';
+      debugPrint('Failed to update audio retention: $e');
+      _error = 'Failed to update settings';
+      notifyListeners();
     } finally {
       _updating = false;
-      notifyListeners();
+    }
+}
+
+  Future<void> _cleanupOldAudio(String studentId) async {
+    try {
+      final cutoff = DateTime.now().subtract(const Duration(days: 7)); // grace period
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(studentId)
+          .collection('attempts')
+          .where('createdAt', isLessThan: Timestamp.fromDate(cutoff))
+          .get();
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final audioUrl = data['audioUrl'] as String?;
+        if (audioUrl != null && audioUrl.isNotEmpty) {
+          try {
+            await FirebaseStorage.instance.refFromURL(audioUrl).delete();
+          } catch (_) {}
+        }
+        batch.update(doc.reference, {'audioUrl': FieldValue.delete()});
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Audio cleanup failed: $e');
     }
   }
 
   Future<void> toggleStudent(ClassroomStudent student, bool include) async {
-  final repo = _repository;
-  final teacherId = _teacherId;
-  if (teacherId == null || repo == null) return;
+    final repo = _repository;
+    final teacherId = _teacherId;
+    if (teacherId == null || repo == null) return;
 
-  final exists = _assignedStudents.any((s) => s.id == student.id);
-  if (include && exists) return;
-  if (!include && !exists) return;
+    final exists = _assignedStudents.any((s) => s.id == student.id);
+    if (include && exists) return;
+    if (!include && !exists) return;
 
-  _updating = true;
-  notifyListeners();
-
-  try {
-    if (include) { // add student
-      _assignedStudents = [..._assignedStudents, student];
-      _selectedStudent = student;
-
-    } else { // remove student
-      _assignedStudents = _assignedStudents.where((s) => s.id != student.id).toList();
-      
-      // Only deselect if they were the currently selected one
-      if (_selectedStudent?.id == student.id) {
-        _selectedStudent = null;
-      }
-    }
-
-    await repo.saveClassroomStudents(teacherId, _assignedStudents);
-    _error = null;
-  } catch (error) {
-    _error = 'Unable to update classroom';
-    // Rollback on error
-    if (include) {
-      _assignedStudents.removeWhere((s) => s.id == student.id);
-      if (_selectedStudent?.id == student.id) _selectedStudent = null;
-    } else {
-      _assignedStudents = [..._assignedStudents, student];
-    }
-  } finally {
-    _updating = false;
+    _updating = true;
     notifyListeners();
-  }
+
+    try {
+      if (include) { // add student
+        _assignedStudents = [..._assignedStudents, student];
+        _selectedStudent = student;
+
+      } else { // remove student
+        _assignedStudents = _assignedStudents.where((s) => s.id != student.id).toList();
+        
+        // Only deselect if they were the currently selected one
+        if (_selectedStudent?.id == student.id) {
+          _selectedStudent = null;
+        }
+      }
+
+      await repo.saveClassroomStudents(teacherId, _assignedStudents);
+      _error = null;
+    } catch (error) {
+      _error = 'Unable to update classroom';
+      // Rollback on error
+      if (include) {
+        _assignedStudents.removeWhere((s) => s.id == student.id);
+        if (_selectedStudent?.id == student.id) _selectedStudent = null;
+      } else {
+        _assignedStudents = [..._assignedStudents, student];
+      }
+    } finally {
+      _updating = false;
+      notifyListeners();
+    }
 }
 
   void selectStudent(ClassroomStudent student) {
