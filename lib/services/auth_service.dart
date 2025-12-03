@@ -405,7 +405,7 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-
+  //allows teacher to create student accounts
   Future<AuthUser> createStudentAccount({
     required String email,
     required String password,
