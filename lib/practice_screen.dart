@@ -876,8 +876,7 @@ class _WordCardState extends State<_WordCard> {
               const SizedBox(width: 12),
               CupertinoButton(
                 padding: const EdgeInsets.all(8),
-                minSize: 32,
-                onPressed: _speakWord,
+                onPressed: _speakWord, minimumSize: Size(32, 32),
                 child: const Icon(
                   CupertinoIcons.speaker_2_fill,
                   size: 28,
