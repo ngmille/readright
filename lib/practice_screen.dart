@@ -845,6 +845,17 @@ class _WordCardState extends State<_WordCard> {
     }
   }
 
+  Future<void> _speakSentence(String sentence) async {
+    try {
+      await _tts.stop();
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.48);
+      await _tts.speak(sentence);
+    } catch (_) {
+      // Ignore TTS errors in UI
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = CupertinoTheme.of(context).textTheme;
@@ -933,9 +944,22 @@ class _WordCardState extends State<_WordCard> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('• '),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Text('•'),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(sentence, style: textTheme.textStyle),
+                    ),
+                    CupertinoButton(
+                      padding: const EdgeInsets.all(4),
+                      minSize: 32,
+                      onPressed: () => _speakSentence(sentence),
+                      child: const Icon(
+                        CupertinoIcons.speaker_2_fill,
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
